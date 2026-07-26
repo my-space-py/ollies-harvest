@@ -57,6 +57,19 @@ button {
   background:
     linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
     url("./assets/images/backgrounds/farm_main.png") center / cover no-repeat;
+  transition: background-image 500ms ease;
+}
+
+.field[data-scene="village"] {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
+    url("./assets/images/backgrounds/village_main.png");
+}
+
+.field[data-scene="festival"] {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
+    url("./assets/images/backgrounds/festival_main.png");
 }
 
 #fieldCanvas {
@@ -78,7 +91,7 @@ button {
 
 .topbar {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr) 142px;
+  grid-template-columns: 170px minmax(0, 1fr) 150px;
   align-items: start;
   gap: 18px;
 }
@@ -107,15 +120,13 @@ button {
 }
 
 .portrait {
-  display: grid;
-  place-items: center;
   width: 48px;
   height: 48px;
   border: 3px solid var(--white);
   border-radius: 50%;
-  background: radial-gradient(circle at 45% 35%, #e6fb7b 0 20%, #8dd53d 21% 100%);
-  color: #2f6516;
-  font-weight: 900;
+  background: #b9df52;
+  object-fit: cover;
+  object-position: center 18%;
 }
 
 .xp-track {
@@ -136,18 +147,17 @@ button {
 }
 
 .title-block {
+  display: grid;
+  place-items: center;
   text-align: center;
-  text-shadow:
-    0 3px 0 #fff8d6,
-    0 6px 16px rgba(89, 59, 13, 0.2);
 }
 
-.eyebrow {
-  margin: 4px 0 4px;
-  color: var(--leaf-dark);
-  font-size: 13px;
-  font-weight: 900;
-  text-transform: uppercase;
+.game-logo {
+  display: block;
+  width: min(100%, 520px);
+  max-height: 150px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 12px rgba(86, 55, 10, 0.2));
 }
 
 h1,
@@ -183,6 +193,19 @@ h2 {
   border-radius: 8px;
   background: var(--card);
   font-weight: 900;
+}
+
+.toolbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.toolbar button img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
 }
 
 .hero-stats {
@@ -239,11 +262,16 @@ h2 {
   font-size: 16px;
 }
 
+.primary-stat #rice {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 .primary-stat strong {
-  align-items: baseline;
   margin-top: 2px;
-  font-size: 52px;
-  line-height: 1;
+  font-size: 24px;
 }
 
 .stat-icon {
@@ -251,13 +279,6 @@ h2 {
   width: 58px;
   height: 58px;
   object-fit: contain;
-}
-
-.stat-unit {
-  align-self: baseline;
-  margin-bottom: 0;
-  color: var(--muted);
-  font-size: 21px;
 }
 
 .stage-strip {
@@ -277,7 +298,7 @@ h2 {
 .stage {
   display: grid;
   place-items: center;
-  min-height: 52px;
+  min-height: 74px;
   padding: 8px 4px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.56);
@@ -285,6 +306,16 @@ h2 {
   font-size: 12px;
   font-weight: 900;
   text-align: center;
+}
+
+.stage img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.stage span {
+  line-height: 1.15;
 }
 
 .stage.active {
@@ -382,6 +413,37 @@ h2 {
   animation: rice-burst 1080ms ease-out forwards;
 }
 
+.action-effect {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: min(68%, 340px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: effect-pop 900ms ease-out forwards;
+}
+
+.action-effect.effect-small {
+  width: 90px;
+}
+
+@keyframes effect-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.45) rotate(-8deg);
+  }
+  22% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.18) rotate(5deg);
+  }
+}
+
 @keyframes float-up {
   from {
     opacity: 0;
@@ -437,6 +499,18 @@ h2 {
   line-height: 1.4;
 }
 
+.goal-heading {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+}
+
+.goal-heading img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .festival-button {
   width: 100%;
   min-height: 38px;
@@ -454,8 +528,8 @@ h2 {
   flex-direction: column;
   gap: 14px;
   min-height: 100vh;
-  max-height: 100vh;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   padding: 18px;
   background: #f8e6b7;
   border-left: 1px solid var(--line);
@@ -473,6 +547,18 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.section-title h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title h2 img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 
 .card-list {
@@ -510,6 +596,12 @@ h2 {
   border-radius: 8px;
   background: var(--card-strong);
   font-weight: 1000;
+}
+
+.card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .card-title {
@@ -568,6 +660,15 @@ h2 {
   border-radius: 8px;
   background: var(--cream);
   color: var(--text);
+  text-align: center;
+}
+
+.festival-badge {
+  display: block;
+  width: 132px;
+  height: 132px;
+  margin: 0 auto 8px;
+  object-fit: contain;
 }
 
 .festival-dialog::backdrop {
@@ -642,6 +743,12 @@ h2 {
     text-align: left;
   }
 
+  .game-logo {
+    width: min(92vw, 430px);
+    max-height: 116px;
+    justify-self: start;
+  }
+
   .profile {
     grid-column: 1;
     grid-row: 2;
@@ -651,6 +758,16 @@ h2 {
     grid-column: 2;
     grid-row: 2;
     min-width: 88px;
+  }
+
+  .toolbar button {
+    min-height: 42px;
+    padding: 0 10px;
+  }
+
+  .toolbar button img {
+    width: 22px;
+    height: 22px;
   }
 
   h1 {
@@ -669,6 +786,15 @@ h2 {
 
   .stage-list {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .stage {
+    min-height: 68px;
+  }
+
+  .stage img {
+    width: 36px;
+    height: 36px;
   }
 
   .play-area {
@@ -697,16 +823,12 @@ h2 {
   }
 
   .primary-stat strong {
-    font-size: 42px;
+    font-size: 20px;
   }
 
   .stat-icon {
     width: 48px;
     height: 48px;
-  }
-
-  .stat-unit {
-    font-size: 18px;
   }
 
   .game-card {

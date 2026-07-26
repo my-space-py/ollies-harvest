@@ -3,22 +3,23 @@ const BASE_PASSIVE_HARVEST = 15;
 const FESTIVAL_CONSUMPTION_GOAL = 30000;
 const FESTIVAL_POPULARITY_GOAL = 100;
 const FESTIVAL_RECIPE_GOAL = 5;
+const OLLIE_HARVEST_IMAGE = "./assets/images/characters/ollie_harvest.png";
 
 const stages = [
-  { name: "모내기", threshold: 0 },
-  { name: "벼 성장", threshold: 500 },
-  { name: "수확", threshold: 1500 },
-  { name: "도정", threshold: 4000 },
-  { name: "밥 짓기", threshold: 8000 },
-  { name: "레시피 개발", threshold: 15000 },
-  { name: "작은 쌀 축제", threshold: FESTIVAL_CONSUMPTION_GOAL },
+  { name: "모내기", threshold: 0, icon: "./assets/images/stages/stage_planting.png" },
+  { name: "벼 성장", threshold: 500, icon: "./assets/images/stages/stage_growing.png" },
+  { name: "수확", threshold: 1500, icon: "./assets/images/stages/stage_harvest.png" },
+  { name: "도정", threshold: 4000, icon: "./assets/images/stages/stage_milling.png" },
+  { name: "밥 짓기", threshold: 8000, icon: "./assets/images/stages/stage_cooking.png" },
+  { name: "레시피 개발", threshold: 15000, icon: "./assets/images/stages/stage_recipe.png" },
+  { name: "작은 쌀 축제", threshold: FESTIVAL_CONSUMPTION_GOAL, icon: "./assets/images/stages/stage_festival.png" },
 ];
 
 const upgrades = [
   {
     id: "seed",
     name: "좋은 볍씨",
-    icon: "씨",
+    icon: "./assets/images/upgrades/upgrade_seed.png",
     baseCost: 25,
     scale: 1.15,
     type: "생산",
@@ -28,7 +29,7 @@ const upgrades = [
   {
     id: "water",
     name: "자동 물대기",
-    icon: "물",
+    icon: "./assets/images/upgrades/upgrade_irrigation.png",
     baseCost: 100,
     scale: 1.17,
     type: "생산",
@@ -38,7 +39,7 @@ const upgrades = [
   {
     id: "helper",
     name: "수확 도우미",
-    icon: "손",
+    icon: "./assets/images/upgrades/upgrade_helper.png",
     baseCost: 450,
     scale: 1.18,
     type: "생산",
@@ -48,7 +49,7 @@ const upgrades = [
   {
     id: "sickle",
     name: "튼튼한 낫",
-    icon: "낫",
+    icon: "./assets/images/upgrades/upgrade_sickle.png",
     baseCost: 80,
     scale: 1.2,
     type: "클릭",
@@ -58,7 +59,7 @@ const upgrades = [
   {
     id: "cooker",
     name: "밥솥 업그레이드",
-    icon: "솥",
+    icon: "./assets/images/upgrades/upgrade_cooker.png",
     baseCost: 300,
     scale: 1.22,
     type: "소비",
@@ -68,7 +69,7 @@ const upgrades = [
   {
     id: "package",
     name: "포장 아이디어",
-    icon: "상",
+    icon: "./assets/images/upgrades/upgrade_package.png",
     baseCost: 700,
     scale: 1.25,
     type: "소비",
@@ -81,7 +82,7 @@ const recipes = [
   {
     id: "meal",
     name: "밥 짓기",
-    icon: "밥",
+    icon: "./assets/images/recipes/recipe_rice_bowl.png",
     cost: 150,
     unlockPopularity: 0,
     popularity: 3,
@@ -92,7 +93,7 @@ const recipes = [
   {
     id: "kimbap",
     name: "김밥 만들기",
-    icon: "김",
+    icon: "./assets/images/recipes/recipe_kimbap.png",
     cost: 120,
     unlockPopularity: 10,
     popularity: 4,
@@ -104,7 +105,7 @@ const recipes = [
   {
     id: "tteok",
     name: "떡 만들기",
-    icon: "떡",
+    icon: "./assets/images/recipes/recipe_tteok.png",
     cost: 250,
     unlockPopularity: 25,
     popularity: 8,
@@ -116,7 +117,7 @@ const recipes = [
   {
     id: "bread",
     name: "쌀빵 굽기",
-    icon: "빵",
+    icon: "./assets/images/recipes/recipe_rice_bread.png",
     cost: 300,
     unlockPopularity: 45,
     popularity: 15,
@@ -127,7 +128,7 @@ const recipes = [
   {
     id: "nurungji",
     name: "누룽지 만들기",
-    icon: "누",
+    icon: "./assets/images/recipes/recipe_nurungji.png",
     cost: 200,
     unlockPopularity: 70,
     popularity: 6,
@@ -209,6 +210,7 @@ const initialState = {
   missionTapBonus: 0,
   milestoneAutoBonus: 0,
   recipeAutoBonus: 0,
+  soundEnabled: true,
   festivalHeld: false,
   lastSavedAt: Date.now(),
   owned: Object.fromEntries(upgrades.map((upgrade) => [upgrade.id, 0])),
@@ -225,8 +227,11 @@ let state = loadState();
 let lastTick = performance.now();
 let lastFullRender = 0;
 let toastTimer = 0;
+let ollieReactionTimer = 0;
+let audioContext;
 
 const elements = {
+  field: document.querySelector(".field"),
   rice: document.querySelector("#rice"),
   consumed: document.querySelector("#consumed"),
   popularity: document.querySelector("#popularity"),
@@ -249,6 +254,8 @@ const elements = {
   floatLayer: document.querySelector("#floatLayer"),
   saveButton: document.querySelector("#saveButton"),
   resetButton: document.querySelector("#resetButton"),
+  soundButton: document.querySelector("#soundButton"),
+  soundIcon: document.querySelector("#soundIcon"),
   toast: document.querySelector("#toast"),
   canvas: document.querySelector("#fieldCanvas"),
   festivalDialog: document.querySelector("#festivalDialog"),
@@ -291,7 +298,7 @@ function loadState() {
     if (offlineGain >= 1) {
       merged.rice += offlineGain;
       merged.totalHarvested += offlineGain;
-      setTimeout(() => showToast(`쉬는 동안 올리가 +${formatAmount(offlineGain)} 쌀알을 수확했어요.`), 300);
+      setTimeout(() => showToast(`쉬는 동안 올리가 +${formatWeight(offlineGain)}을 수확했어요.`), 300);
     }
     return merged;
   } catch {
@@ -365,6 +372,9 @@ function addXp(amount) {
     state.xp -= getXpNeeded(state.level);
     state.level += 1;
     showToast(`올리 레벨 ${state.level}!`);
+    showOllieReaction("./assets/images/characters/ollie_happy.png", 1200);
+    showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
+    playGameSound("level");
   }
 }
 
@@ -388,7 +398,50 @@ function formatAmount(value) {
 
 function formatWeight(value) {
   if (value < 1000) return `${Math.floor(value)}g`;
-  return `${(value / 1000).toFixed(value >= 10000 ? 1 : 2).replace(/\.0$/, "")}kg`;
+  const kilograms = value / 1000;
+  const decimals = kilograms >= 10 ? 1 : 2;
+  return `${kilograms.toFixed(decimals).replace(/\.?0+$/, "")}kg`;
+}
+
+function playGameSound(type = "click") {
+  if (!state.soundEnabled) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  audioContext ||= new AudioContextClass();
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const frequencies = { click: 520, upgrade: 660, recipe: 780, level: 920, festival: 1040 };
+  const duration = type === "festival" ? 0.28 : 0.12;
+  const now = audioContext.currentTime;
+
+  oscillator.type = type === "click" ? "sine" : "triangle";
+  oscillator.frequency.setValueAtTime(frequencies[type] || frequencies.click, now);
+  gain.gain.setValueAtTime(0.045, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration);
+}
+
+function showOllieReaction(src, duration = 900) {
+  clearTimeout(ollieReactionTimer);
+  elements.ollieImage.src = src;
+  ollieReactionTimer = setTimeout(() => {
+    elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
+  }, duration);
+}
+
+function showActionEffect(src, x, y, className = "") {
+  const effect = document.createElement("img");
+  effect.className = `action-effect ${className}`.trim();
+  effect.src = src;
+  effect.alt = "";
+  if (Number.isFinite(x)) effect.style.left = `${x}px`;
+  if (Number.isFinite(y)) effect.style.top = `${y}px`;
+  elements.floatLayer.append(effect);
+  setTimeout(() => effect.remove(), 920);
 }
 
 function buyUpgrade(upgrade) {
@@ -396,6 +449,9 @@ function buyUpgrade(upgrade) {
   if (!spendRice(cost)) return;
   state.owned[upgrade.id] += 1;
   addXp(4);
+  showOllieReaction("./assets/images/characters/ollie_upgrade.png", 1000);
+  showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
+  playGameSound("upgrade");
   showToast(`${upgrade.name} 업그레이드 완료`);
   checkMilestones();
   render();
@@ -405,6 +461,7 @@ function useRecipe(recipe) {
   if (state.popularity < recipe.unlockPopularity) return;
   if (!spendRice(recipe.cost)) return;
 
+  const unlockedBefore = getUnlockedRecipeCount();
   const consumedGain = recipe.cost * (1 + getConsumptionBonus());
   const popularityGain = Math.ceil(recipe.popularity * (1 + getPopularityBonus()));
   state.consumed += consumedGain;
@@ -422,6 +479,12 @@ function useRecipe(recipe) {
     state.recipeAutoBonus += recipe.autoMultiplierBonus;
   }
 
+  showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
+  showActionEffect("./assets/images/effects/fx_consume_complete.png");
+  playGameSound("recipe");
+  if (getUnlockedRecipeCount() > unlockedBefore) {
+    showActionEffect("./assets/images/effects/fx_recipe_unlock.png", undefined, undefined, "effect-unlock");
+  }
   showToast(recipe.message);
   checkMilestones();
   render();
@@ -432,6 +495,8 @@ function claimMission(mission) {
   state.claimedMissions[mission.id] = true;
   mission.reward();
   addXp(12);
+  showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
+  playGameSound("upgrade");
   showToast(`${mission.name} 완료: ${mission.rewardText}`);
   checkMilestones();
   render();
@@ -460,6 +525,9 @@ function holdFestival() {
   state.festivalHeld = true;
   saveState(true);
   render();
+  showOllieReaction("./assets/images/characters/ollie_happy.png", 1800);
+  showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
+  playGameSound("festival");
   if (elements.festivalDialog.showModal) {
     elements.festivalDialog.showModal();
   } else {
@@ -468,13 +536,19 @@ function holdFestival() {
 }
 
 function renderStats() {
-  elements.rice.textContent = formatAmount(state.rice);
+  elements.rice.textContent = formatWeight(state.rice);
   elements.consumed.textContent = formatWeight(state.consumed);
   elements.popularity.textContent = `${Math.floor(state.popularity)}`;
-  elements.perSecond.textContent = `${formatAmount(getPerSecond())}g/s`;
-  elements.tapValue.textContent = `+${formatAmount(getTapPower())}g`;
+  elements.perSecond.textContent = `${formatWeight(getPerSecond())}/s`;
+  elements.tapValue.textContent = `+${formatWeight(getTapPower())}`;
   elements.levelLabel.textContent = `Lv. ${state.level}`;
   elements.xpBar.style.width = `${getLevelProgress()}%`;
+  elements.field.dataset.scene = state.festivalHeld ? "festival" : state.consumed >= 10000 ? "village" : "farm";
+  elements.soundIcon.src = state.soundEnabled
+    ? "./assets/images/ui/ui_sound_on.png"
+    : "./assets/images/ui/ui_sound_off.png";
+  elements.soundButton.setAttribute("aria-pressed", `${state.soundEnabled}`);
+  elements.soundButton.title = state.soundEnabled ? "효과음 켜짐" : "효과음 꺼짐";
 
   const clickLeft = Math.max(0, Math.ceil((state.buffs.clickUntil - Date.now()) / 1000));
   const autoLeft = Math.max(0, Math.ceil((state.buffs.autoUntil - Date.now()) / 1000));
@@ -504,7 +578,7 @@ function renderStages() {
   for (const stage of stages) {
     const div = document.createElement("div");
     div.className = `stage${state.consumed >= stage.threshold ? " active" : ""}`;
-    div.textContent = stage.name;
+    div.innerHTML = `<img src="${stage.icon}" alt="" /><span>${stage.name}</span>`;
     elements.stageList.append(div);
   }
 }
@@ -519,7 +593,7 @@ function renderRecipes() {
     button.type = "button";
     button.disabled = !unlocked || state.rice < recipe.cost;
     button.innerHTML = `
-      <span class="card-icon">${recipe.icon}</span>
+      <span class="card-icon"><img src="${recipe.icon}" alt="" /></span>
       <span>
         <span class="card-title">${recipe.name}</span>
         <span class="card-meta">${unlocked ? recipe.note : `인기도 ${recipe.unlockPopularity} 필요`}</span>
@@ -541,13 +615,13 @@ function renderUpgrades() {
     button.type = "button";
     button.disabled = state.rice < cost;
     button.innerHTML = `
-      <span class="card-icon">${upgrade.icon}</span>
+      <span class="card-icon"><img src="${upgrade.icon}" alt="" /></span>
       <span>
         <span class="card-title">${upgrade.name}</span>
         <span class="card-meta">${upgrade.effectText}</span>
         <span class="card-note">${upgrade.type} · 보유 ${state.owned[upgrade.id]}</span>
       </span>
-      <span class="card-cost">${formatAmount(cost)}</span>
+      <span class="card-cost">${formatWeight(cost)}</span>
     `;
     button.addEventListener("click", () => buyUpgrade(upgrade));
     elements.upgradeList.append(button);
@@ -564,7 +638,7 @@ function renderMissions() {
     button.type = "button";
     button.disabled = !done || claimed;
     button.innerHTML = `
-      <span class="card-icon">${claimed ? "완" : done ? "!" : "목"}</span>
+      <span class="card-icon"><img src="./assets/images/ui/ui_mission.png" alt="" /></span>
       <span>
         <span class="card-title">${mission.name}</span>
         <span class="card-meta">${mission.conditionText}</span>
@@ -609,9 +683,12 @@ function showToast(message) {
 }
 
 function showFloat(amount, x, y) {
+  showActionEffect("./assets/images/effects/fx_click_ring.png", x, y, "effect-click");
+  showActionEffect("./assets/images/effects/fx_sparkle.png", x - 54, y - 48, "effect-small");
+
   const text = document.createElement("span");
   text.className = "float-text";
-  text.textContent = `+${formatAmount(amount)} 쌀알`;
+  text.textContent = `+${formatWeight(amount)}`;
   text.style.left = `${x - 44}px`;
   text.style.top = `${y - 118}px`;
   elements.floatLayer.append(text);
@@ -636,6 +713,7 @@ function showFloat(amount, x, y) {
 
 function resetGame() {
   state = cloneInitialState();
+  elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   render();
   showToast("올리의 농장을 새로 시작했어요.");
@@ -676,7 +754,13 @@ elements.harvestButton.addEventListener("click", (event) => {
   gainRice(amount);
   addXp(1);
   const rect = elements.harvestButton.getBoundingClientRect();
-  showFloat(amount, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  const layerRect = elements.floatLayer.getBoundingClientRect();
+  showFloat(
+    amount,
+    rect.left - layerRect.left + rect.width / 2,
+    rect.top - layerRect.top + rect.height / 2,
+  );
+  playGameSound("click");
   elements.harvestButton.classList.add("harvest-pop");
   setTimeout(() => {
     elements.harvestButton.classList.remove("harvest-pop");
@@ -685,8 +769,17 @@ elements.harvestButton.addEventListener("click", (event) => {
   render();
 });
 
-elements.saveButton.addEventListener("click", () => saveState(false));
+elements.saveButton.addEventListener("click", () => {
+  saveState(false);
+  playGameSound("click");
+});
 elements.resetButton.addEventListener("click", resetGame);
+elements.soundButton.addEventListener("click", () => {
+  state.soundEnabled = !state.soundEnabled;
+  renderStats();
+  if (state.soundEnabled) playGameSound("click");
+  saveState(true);
+});
 elements.festivalButton.addEventListener("click", holdFestival);
 elements.closeFestivalButton.addEventListener("click", () => elements.festivalDialog.close());
 window.addEventListener("resize", resizeCanvas);

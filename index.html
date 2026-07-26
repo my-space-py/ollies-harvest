@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>올리의 수확</title>
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=7" />
   </head>
   <body>
     <main class="app">
@@ -13,7 +13,7 @@
 
         <header class="topbar">
           <div class="profile">
-            <div class="portrait" aria-hidden="true">올</div>
+            <img class="portrait" src="./assets/images/characters/ollie_portrait.png" alt="올리" />
             <div>
               <strong id="levelLabel">Lv. 1</strong>
               <div class="xp-track" aria-label="경험치">
@@ -23,20 +23,29 @@
           </div>
 
           <div class="title-block">
-            <p class="eyebrow">Rice Idle Campaign</p>
-            <h1>올리의 수확</h1>
+            <img class="game-logo" src="./assets/images/branding/logo_ollies_harvest.png" alt="올리의 수확" />
           </div>
 
           <div class="toolbar">
-            <button id="saveButton" type="button" title="저장">저장</button>
-            <button id="resetButton" type="button" title="초기화">초기화</button>
+            <button id="saveButton" type="button" title="저장">
+              <img src="./assets/images/ui/ui_storage.png" alt="" />
+              <span>저장</span>
+            </button>
+            <button id="resetButton" type="button" title="초기화">
+              <img src="./assets/images/ui/ui_settings.png" alt="" />
+              <span>초기화</span>
+            </button>
+            <button id="soundButton" type="button" title="효과음 켜짐" aria-pressed="true">
+              <img id="soundIcon" src="./assets/images/ui/ui_sound_on.png" alt="" />
+              <span>소리</span>
+            </button>
           </div>
         </header>
 
         <section class="hero-stats" aria-label="핵심 지표">
           <div class="primary-stat">
             <span>보유 쌀알</span>
-            <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="rice">0</span><small class="stat-unit">g</small></strong>
+            <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="rice">0g</span></strong>
           </div>
           <div>
             <span>누적 쌀 소비량</span>
@@ -71,13 +80,13 @@
 
         <section class="bottom-cards" aria-label="목표와 효과">
           <article class="goal-card">
-            <span>최종 목표</span>
+            <span class="goal-heading"><img src="./assets/images/ui/ui_milestone.png" alt="" />최종 목표</span>
             <strong id="festivalGoal">작은 쌀 축제 준비 중</strong>
             <p id="festivalHint">누적 소비량 30kg, 인기도 100, 레시피 5종 해금</p>
             <button id="festivalButton" class="festival-button" type="button" hidden>축제 개최</button>
           </article>
           <article class="goal-card">
-            <span>활성 효과</span>
+            <span class="goal-heading"><img src="./assets/images/ui/ui_stats.png" alt="" />활성 효과</span>
             <strong id="buffSummary">효과 없음</strong>
             <p>레시피를 소비하면 수확 효율이 잠시 또는 영구적으로 좋아집니다.</p>
           </article>
@@ -87,7 +96,7 @@
       <aside class="panel" aria-label="성장 메뉴">
         <section class="panel-section">
           <div class="section-title">
-            <h2>레시피</h2>
+            <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
             <span id="recipeCount">0/5 해금</span>
           </div>
           <div id="recipeList" class="card-list"></div>
@@ -95,7 +104,7 @@
 
         <section class="panel-section">
           <div class="section-title">
-            <h2>업그레이드</h2>
+            <h2><img src="./assets/images/ui/ui_upgrade.png" alt="" />업그레이드</h2>
             <span>생산과 소비 강화</span>
           </div>
           <div id="upgradeList" class="card-list"></div>
@@ -103,7 +112,7 @@
 
         <section class="panel-section">
           <div class="section-title">
-            <h2>미션</h2>
+            <h2><img src="./assets/images/ui/ui_mission.png" alt="" />미션</h2>
             <span>초반 동선</span>
           </div>
           <div id="missionList" class="card-list"></div>
@@ -111,7 +120,7 @@
 
         <section class="panel-section">
           <div class="section-title">
-            <h2>소비 마일스톤</h2>
+            <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />소비 마일스톤</h2>
             <span>쌀을 즐기는 여정</span>
           </div>
           <div id="milestoneList" class="milestones"></div>
@@ -120,6 +129,7 @@
     </main>
 
     <dialog id="festivalDialog" class="festival-dialog">
+      <img class="festival-badge" src="./assets/images/badges/festival_badge.png" alt="작은 쌀 축제 달성 배지" />
       <h2>작은 쌀 축제 개최!</h2>
       <p>
         작은 논에서 시작된 올리의 수확이 모두의 축제가 되었어요.
@@ -130,6 +140,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./game.js?v=2"></script>
+    <script src="./game.js?v=4"></script>
   </body>
 </html>

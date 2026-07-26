@@ -89,9 +89,16 @@ idle_html5_game/
 ├── README.md
 └── assets/
     └── images/
-        ├── backgrounds/       # 농장 배경
-        ├── characters/        # 올리 캐릭터
-        └── crops/             # 쌀알과 쌀자루 이미지
+        ├── backgrounds/       # 농장, 마을, 축제 배경
+        ├── badges/            # 축제 달성 배지
+        ├── branding/          # 게임 타이틀 로고
+        ├── characters/        # 올리 캐릭터와 반응 이미지
+        ├── crops/             # 쌀알과 쌀자루 이미지
+        ├── effects/           # 클릭, 레벨업, 소비 효과
+        ├── recipes/           # 쌀 음식 레시피 이미지
+        ├── stages/            # 성장 단계 이미지
+        ├── ui/                # 메뉴와 상태 아이콘
+        └── upgrades/          # 업그레이드 이미지
 ```
 
 ## 협업 방식
