@@ -9,7 +9,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=7" />
+    <link rel="stylesheet" href="./styles.css?v=10" />
   </head>
   <body>
     <main class="app" id="homeScreen">
@@ -55,11 +55,11 @@
             <span>보유 쌀알</span>
             <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="rice" class="stat-value">0g</span></strong>
           </div>
-          <div hidden>
+          <div class="primary-stat">
             <span>누적 쌀 소비량</span>
             <strong id="consumed">0g</strong>
           </div>
-          <div hidden>
+          <div class="primary-stat">
             <span>인기도</span>
             <strong id="popularity">0</strong>
           </div>
@@ -122,25 +122,6 @@
         </section>
       </section>
 
-      <aside class="panel" aria-label="성장 메뉴">
-        <!-- 레시피 섹션: 항상 숨김 (요청에 따라 비활성화) -->
-        <section class="panel-section" id="recipeSection" hidden>
-          <div class="section-title">
-            <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
-            <span id="recipeCount">0/5 해금</span>
-          </div>
-          <div id="recipeList" class="card-list"></div>
-        </section>
-
-        <!-- 소비 마일스톤 섹션: 항상 숨김 (요청에 따라 비활성화) -->
-        <section class="panel-section" id="milestoneSection" hidden>
-          <div class="section-title">
-            <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />소비 마일스톤</h2>
-            <span>쌀을 즐기는 여정</span>
-          </div>
-          <div id="milestoneList" class="milestones"></div>
-        </section>
-      </aside>
     </main>
 
     <!-- 업그레이드 화면: 하단 네비게이션 '업그레이드' 버튼을 누르면 표시됨 -->
@@ -165,23 +146,73 @@
       </div>
     </section>
 
-    <!-- 랭킹 화면: 아직 내용 없음 -->
+    <!-- 레시피 화면: 하단 네비게이션 '레시피' 버튼을 누르면 표시됨 -->
+    <section id="recipeScreen" class="app-screen" hidden aria-label="레시피">
+      <div class="panel-section screen-inner">
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
+          <span id="recipeCount">0/5 해금</span>
+        </div>
+        <div id="recipeList" class="card-list"></div>
+      </div>
+    </section>
+
+    <!-- 통계 화면: 하단 네비게이션 '통계' 버튼을 누르면 표시됨 -->
+    <section id="statsScreen" class="app-screen" hidden aria-label="통계">
+      <div class="panel-section screen-inner">
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_stats.png" alt="" />통계</h2>
+          <span>올리의 성장 기록</span>
+        </div>
+        <div id="statsSummary" class="stats-grid"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_upgrade.png" alt="" />업그레이드 보유 현황</h2>
+        </div>
+        <div id="statsUpgradeList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />소비 마일스톤</h2>
+          <span>쌀을 즐기는 여정</span>
+        </div>
+        <div id="milestoneList" class="milestones"></div>
+      </div>
+    </section>
+
+    <!-- 랭킹 화면: 하단 네비게이션 '랭킹' 버튼을 누르면 표시되며, 탭 클릭 시 서버에서 목록을 불러옴 -->
     <section id="rankingScreen" class="app-screen" hidden aria-label="랭킹">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>랭킹</h2>
+          <span>누적 쌀 소비량 순위</span>
         </div>
-        <p class="screen-placeholder">준비 중입니다.</p>
+        <div id="rankingList" class="card-list"></div>
       </div>
     </section>
 
-    <!-- 친구 화면: 아직 내용 없음 -->
+    <!-- 친구 화면: 하단 네비게이션 '친구' 버튼을 누르면 표시되며, 탭 클릭 시 요청/친구 목록을 불러옴 -->
     <section id="friendsScreen" class="app-screen" hidden aria-label="친구">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>친구</h2>
+          <span>아이디로 친구 요청</span>
         </div>
-        <p class="screen-placeholder">준비 중입니다.</p>
+        <form id="friendRequestForm" class="friend-request-form">
+          <input type="text" id="friendUsernameInput" placeholder="친구 아이디 입력" autocomplete="off" />
+          <button type="submit">요청 보내기</button>
+        </form>
+        <p id="friendRequestMessage" class="friend-request-message"></p>
+
+        <div class="section-title">
+          <h2>받은 친구 요청</h2>
+        </div>
+        <div id="friendRequestList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2>친구 순위표</h2>
+          <span>누적 쌀 소비량 기준</span>
+        </div>
+        <div id="friendList" class="card-list"></div>
       </div>
     </section>
 
@@ -190,6 +221,8 @@
       <button type="button" class="nav-btn active" data-tab="home">홈</button>
       <button type="button" class="nav-btn" data-tab="upgrade">업그레이드</button>
       <button type="button" class="nav-btn" data-tab="mission">미션</button>
+      <button type="button" class="nav-btn" data-tab="recipe">레시피</button>
+      <button type="button" class="nav-btn" data-tab="stats">통계</button>
       <button type="button" class="nav-btn" data-tab="ranking">랭킹</button>
       <button type="button" class="nav-btn" data-tab="friends">친구</button>
     </nav>
@@ -231,7 +264,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./game.js?v=4"></script>
+    <script src="./game.js?v=10"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -244,6 +277,8 @@
         home: document.getElementById("homeScreen"),
         upgrade: document.getElementById("upgradeScreen"),
         mission: document.getElementById("missionScreen"),
+        recipe: document.getElementById("recipeScreen"),
+        stats: document.getElementById("statsScreen"),
         ranking: document.getElementById("rankingScreen"),
         friends: document.getElementById("friendsScreen"),
       };
@@ -260,7 +295,15 @@
       }
 
       navButtons.forEach((btn) => {
-        btn.addEventListener("click", () => showTab(btn.dataset.tab));
+        btn.addEventListener("click", () => {
+          showTab(btn.dataset.tab);
+          if (btn.dataset.tab === "ranking" && typeof window.loadLeaderboard === "function") {
+            window.loadLeaderboard();
+          }
+          if (btn.dataset.tab === "friends" && typeof window.loadFriendsScreen === "function") {
+            window.loadFriendsScreen();
+          }
+        });
       });
 
       showTab("home");

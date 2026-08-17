@@ -843,14 +843,9 @@ h2 {
 
 /* ===== 하단 소프트키 네비게이션 & 화면 전환 ===== */
 
-/* 레시피/소비마일스톤을 담던 사이드 패널이 항상 비어있으므로
-   그리드 컬럼 자체를 없애서 화면 비율을 정상화 */
+/* 사이드 패널(aside.panel) 제거 후 단일 컬럼 레이아웃으로 정리 */
 .app {
   grid-template-columns: minmax(0, 1fr);
-}
-
-aside.panel {
-  display: none;
 }
 
 /* [hidden] 속성이 .app의 display: grid 규칙에 밀려 무시되던 문제 수정.
@@ -1011,7 +1006,7 @@ body {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: center;
   width: 100%;
   height: 64px;
@@ -1082,6 +1077,98 @@ body {
   color: var(--muted);
   font-weight: 700;
   text-align: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.stats-item {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.friend-request-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.friend-request-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.friend-request-form button {
+  padding: 0 16px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffd86b, #f2a51a);
+  color: var(--text);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.friend-request-message {
+  min-height: 1.2em;
+  margin-bottom: 14px;
+  color: var(--orange);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.friend-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.friend-accept-btn,
+.friend-decline-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 900;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.friend-accept-btn {
+  background: linear-gradient(180deg, #92cf48, #4b9f24);
+  color: #fff;
+}
+
+.friend-decline-btn {
+  background: rgba(154, 92, 22, 0.12);
+  color: var(--brown);
+}
+
+.stats-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.stats-item strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.app-screen .section-title {
+  margin-top: 18px;
+}
+
+.app-screen .section-title:first-of-type {
+  margin-top: 0;
 }
 
 @media (max-width: 460px) {

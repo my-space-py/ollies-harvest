@@ -1,4 +1,5 @@
 const STORAGE_KEY = "ollies-harvest-save-v1";
+const API_BASE_URL = "http://127.0.0.1:8000";
 const BASE_PASSIVE_HARVEST = 15;
 const FESTIVAL_CONSUMPTION_GOAL = 30000;
 const FESTIVAL_POPULARITY_GOAL = 100;
@@ -245,6 +246,14 @@ const elements = {
   upgradeList: document.querySelector("#upgradeList"),
   missionList: document.querySelector("#missionList"),
   milestoneList: document.querySelector("#milestoneList"),
+  statsSummary: document.querySelector("#statsSummary"),
+  statsUpgradeList: document.querySelector("#statsUpgradeList"),
+  rankingList: document.querySelector("#rankingList"),
+  friendRequestForm: document.querySelector("#friendRequestForm"),
+  friendUsernameInput: document.querySelector("#friendUsernameInput"),
+  friendRequestMessage: document.querySelector("#friendRequestMessage"),
+  friendRequestList: document.querySelector("#friendRequestList"),
+  friendList: document.querySelector("#friendList"),
   festivalGoal: document.querySelector("#festivalGoal"),
   festivalHint: document.querySelector("#festivalHint"),
   festivalButton: document.querySelector("#festivalButton"),
@@ -276,39 +285,267 @@ function cloneInitialState() {
   return JSON.parse(JSON.stringify(initialState));
 }
 
+function normalizeState(saved) {
+  const merged = {
+    ...cloneInitialState(),
+    ...saved,
+    owned: { ...initialState.owned, ...saved.owned },
+    recipeUses: { ...initialState.recipeUses, ...saved.recipeUses },
+    claimedMissions: { ...initialState.claimedMissions, ...saved.claimedMissions },
+    claimedMilestones: { ...initialState.claimedMilestones, ...saved.claimedMilestones },
+    buffs: { ...initialState.buffs, ...saved.buffs },
+  };
+
+  const elapsed = Math.max(0, (Date.now() - (saved.lastSavedAt || Date.now())) / 1000);
+  const offlineSeconds = Math.min(elapsed, 60 * 60 * 4);
+  const offlineGain = getPerSecond(merged, { ignoreTimedBuffs: true }) * offlineSeconds * getOfflineMultiplier(merged);
+  if (offlineGain >= 1) {
+    merged.rice += offlineGain;
+    merged.totalHarvested += offlineGain;
+    setTimeout(() => showToast(`쉬는 동안 올리가 +${formatWeight(offlineGain)}을 수확했어요.`), 300);
+  }
+  return merged;
+}
+
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("currentUser"));
+  } catch {
+    return null;
+  }
+}
+
+// 계정별로 로컬 저장을 분리한다. 같은 브라우저에서 여러 계정을 오가며 플레이해도
+// 서로 다른 계정의 진행 데이터가 섞이지 않도록 사용자 id를 키에 포함한다.
+function getStorageKey() {
+  const user = getCurrentUser();
+  return user ? `${STORAGE_KEY}:${user.id}` : STORAGE_KEY;
+}
+
+// initialState.lastSavedAt은 스크립트가 처음 로드될 때의 시각으로 고정되어 있어
+// "실제로 저장된 적 없는 상태"인지 구분할 수 없다. 이 플래그로 별도 추적한다.
+let hasLocalSave = false;
+
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(getStorageKey());
   if (!raw) return cloneInitialState();
 
   try {
-    const saved = JSON.parse(raw);
-    const merged = {
-      ...cloneInitialState(),
-      ...saved,
-      owned: { ...initialState.owned, ...saved.owned },
-      recipeUses: { ...initialState.recipeUses, ...saved.recipeUses },
-      claimedMissions: { ...initialState.claimedMissions, ...saved.claimedMissions },
-      claimedMilestones: { ...initialState.claimedMilestones, ...saved.claimedMilestones },
-      buffs: { ...initialState.buffs, ...saved.buffs },
-    };
-
-    const elapsed = Math.max(0, (Date.now() - (saved.lastSavedAt || Date.now())) / 1000);
-    const offlineSeconds = Math.min(elapsed, 60 * 60 * 4);
-    const offlineGain = getPerSecond(merged, { ignoreTimedBuffs: true }) * offlineSeconds * getOfflineMultiplier(merged);
-    if (offlineGain >= 1) {
-      merged.rice += offlineGain;
-      merged.totalHarvested += offlineGain;
-      setTimeout(() => showToast(`쉬는 동안 올리가 +${formatWeight(offlineGain)}을 수확했어요.`), 300);
-    }
-    return merged;
+    const parsed = normalizeState(JSON.parse(raw));
+    hasLocalSave = true;
+    return parsed;
   } catch {
     return cloneInitialState();
   }
 }
 
+// 로그인 상태일 때 서버에 저장된 세이브를 불러와 로컬보다 최신이면 반영한다.
+// 로컬에 실제 저장 기록이 없다면(새 기기 등) 타임스탬프 비교 없이 서버 데이터를 우선한다.
+// 서버 연결에 실패해도 로컬 저장 데이터로 계속 플레이할 수 있어야 하므로 오류는 조용히 무시한다.
+async function syncFromServer() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/save?user_id=${user.id}`);
+    if (!res.ok) return;
+    const payload = await res.json();
+    const serverState = payload.data;
+    const localTimestamp = hasLocalSave ? state.lastSavedAt || 0 : 0;
+    if (serverState && (serverState.lastSavedAt || 0) > localTimestamp) {
+      state = normalizeState(serverState);
+      hasLocalSave = true;
+      render();
+    }
+  } catch {
+    // 서버에 연결할 수 없으면 로컬 저장 데이터로 계속 진행한다.
+  }
+}
+
+// 주의: user_id를 그대로 실어 보내며 서버는 별도 인증 없이 이를 신뢰한다 (TODO.md 4.3 참고).
+function pushToServer() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  fetch(`${API_BASE_URL}/save`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: user.id, data: state }),
+  }).catch(() => {
+    // 서버에 연결할 수 없으면 로컬 저장만 유지한다.
+  });
+}
+
+// 랭킹 탭을 열 때 index.html의 탭 전환 스크립트에서 호출한다 (누적 쌀 소비량 기준, 서버 전체 사용자 대상).
+async function loadLeaderboard() {
+  if (!elements.rankingList) return;
+  elements.rankingList.innerHTML = '<p class="screen-placeholder">불러오는 중...</p>';
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/leaderboard`);
+    if (!res.ok) throw new Error("leaderboard request failed");
+    const payload = await res.json();
+    renderLeaderboard(payload.entries);
+  } catch {
+    elements.rankingList.innerHTML = '<p class="screen-placeholder">랭킹을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</p>';
+  }
+}
+
+function renderLeaderboard(entries) {
+  if (!entries || entries.length === 0) {
+    elements.rankingList.innerHTML = '<p class="screen-placeholder">아직 랭킹에 오른 플레이어가 없습니다.</p>';
+    return;
+  }
+
+  const currentUser = getCurrentUser();
+  elements.rankingList.innerHTML = "";
+  for (const entry of entries) {
+    const div = document.createElement("div");
+    const isMe = currentUser && entry.nickname === currentUser.nickname;
+    div.className = `game-card${isMe ? " claimed" : ""}`;
+    div.innerHTML = `
+      <span class="card-icon">${entry.rank}</span>
+      <span>
+        <span class="card-title">${entry.nickname}${isMe ? " (나)" : ""}</span>
+        <span class="card-meta">누적 쌀 소비량</span>
+      </span>
+      <span class="card-cost">${formatWeight(entry.consumed)}</span>
+    `;
+    elements.rankingList.append(div);
+  }
+}
+
+// 친구 탭을 열 때 index.html의 탭 전환 스크립트에서 호출한다.
+// 요청 → 수락 플로우: 아이디로 요청을 보내고, 상대가 수락하면 서로의 친구 순위표에 나타난다.
+function loadFriendsScreen() {
+  loadFriendRequests();
+  loadFriends();
+}
+
+async function loadFriendRequests() {
+  const user = getCurrentUser();
+  if (!user || !elements.friendRequestList) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/friends/requests?user_id=${user.id}`);
+    if (!res.ok) throw new Error("friend requests fetch failed");
+    const payload = await res.json();
+    renderFriendRequests(payload.requests);
+  } catch {
+    elements.friendRequestList.innerHTML = '<p class="screen-placeholder">받은 요청을 불러올 수 없습니다.</p>';
+  }
+}
+
+function renderFriendRequests(requests) {
+  if (!requests || requests.length === 0) {
+    elements.friendRequestList.innerHTML = '<p class="screen-placeholder">받은 친구 요청이 없습니다.</p>';
+    return;
+  }
+
+  elements.friendRequestList.innerHTML = "";
+  for (const request of requests) {
+    const div = document.createElement("div");
+    div.className = "game-card";
+    div.innerHTML = `
+      <span class="card-icon">👤</span>
+      <span>
+        <span class="card-title">${request.requester_nickname}</span>
+        <span class="card-meta">친구 요청을 보냈어요</span>
+      </span>
+      <span class="friend-request-actions">
+        <button type="button" class="friend-accept-btn">수락</button>
+        <button type="button" class="friend-decline-btn">거절</button>
+      </span>
+    `;
+    div.querySelector(".friend-accept-btn").addEventListener("click", () => respondToFriendRequest(request.request_id, true));
+    div.querySelector(".friend-decline-btn").addEventListener("click", () => respondToFriendRequest(request.request_id, false));
+    elements.friendRequestList.append(div);
+  }
+}
+
+async function respondToFriendRequest(requestId, accept) {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/friends/${accept ? "accept" : "decline"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: user.id, request_id: requestId }),
+    });
+    const payload = await res.json();
+    showToast(res.ok ? payload.message : payload.detail || "요청 처리에 실패했습니다.");
+    loadFriendsScreen();
+  } catch {
+    showToast("서버에 연결할 수 없습니다.");
+  }
+}
+
+async function loadFriends() {
+  const user = getCurrentUser();
+  if (!user || !elements.friendList) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/friends?user_id=${user.id}`);
+    if (!res.ok) throw new Error("friends fetch failed");
+    const payload = await res.json();
+    renderFriends(payload.friends);
+  } catch {
+    elements.friendList.innerHTML = '<p class="screen-placeholder">친구 목록을 불러올 수 없습니다.</p>';
+  }
+}
+
+function renderFriends(friends) {
+  if (!friends || friends.length === 0) {
+    elements.friendList.innerHTML = '<p class="screen-placeholder">아직 친구가 없습니다. 아이디로 친구를 추가해보세요.</p>';
+    return;
+  }
+
+  elements.friendList.innerHTML = "";
+  friends.forEach((friend, index) => {
+    const div = document.createElement("div");
+    div.className = "game-card";
+    div.innerHTML = `
+      <span class="card-icon">${index + 1}</span>
+      <span>
+        <span class="card-title">${friend.nickname}</span>
+        <span class="card-meta">누적 쌀 소비량</span>
+      </span>
+      <span class="card-cost">${formatWeight(friend.consumed)}</span>
+    `;
+    elements.friendList.append(div);
+  });
+}
+
+if (elements.friendRequestForm) {
+  elements.friendRequestForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const user = getCurrentUser();
+    const username = elements.friendUsernameInput.value.trim();
+    if (!user || !username) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/friends/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requester_id: user.id, target_username: username }),
+      });
+      const payload = await res.json();
+      elements.friendRequestMessage.textContent = res.ok ? payload.message : payload.detail || "친구 요청에 실패했습니다.";
+      if (res.ok) {
+        elements.friendUsernameInput.value = "";
+        loadFriendsScreen();
+      }
+    } catch {
+      elements.friendRequestMessage.textContent = "서버에 연결할 수 없습니다.";
+    }
+  });
+}
+
 function saveState(silent = false) {
   state.lastSavedAt = Date.now();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  pushToServer();
   if (!silent) showToast("저장 완료");
 }
 
@@ -666,6 +903,33 @@ function renderMilestones() {
   }
 }
 
+function renderStatsSummary() {
+  elements.statsSummary.innerHTML = `
+    <div class="stats-item"><span>보유 쌀알</span><strong>${formatWeight(state.rice)}</strong></div>
+    <div class="stats-item"><span>누적 쌀 소비량</span><strong>${formatWeight(state.consumed)}</strong></div>
+    <div class="stats-item"><span>인기도</span><strong>${Math.floor(state.popularity)}</strong></div>
+    <div class="stats-item"><span>레벨</span><strong>Lv. ${state.level}</strong></div>
+    <div class="stats-item"><span>경험치</span><strong>${Math.floor(state.xp)} / ${getXpNeeded(state.level)}</strong></div>
+  `;
+}
+
+function renderStatsUpgrades() {
+  elements.statsUpgradeList.innerHTML = "";
+  for (const upgrade of upgrades) {
+    const div = document.createElement("div");
+    div.className = "game-card";
+    div.innerHTML = `
+      <span class="card-icon"><img src="${upgrade.icon}" alt="" /></span>
+      <span>
+        <span class="card-title">${upgrade.name}</span>
+        <span class="card-meta">${upgrade.effectText}</span>
+      </span>
+      <span class="card-cost">보유 ${state.owned[upgrade.id]}</span>
+    `;
+    elements.statsUpgradeList.append(div);
+  }
+}
+
 function render() {
   renderStats();
   renderStages();
@@ -673,6 +937,8 @@ function render() {
   renderUpgrades();
   renderMissions();
   renderMilestones();
+  renderStatsSummary();
+  renderStatsUpgrades();
 }
 
 function showToast(message) {
@@ -714,7 +980,7 @@ function showFloat(amount, x, y) {
 function resetGame() {
   state = cloneInitialState();
   elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(getStorageKey(), JSON.stringify(state));
   render();
   showToast("올리의 농장을 새로 시작했어요.");
 }
@@ -809,4 +1075,5 @@ function gameLoop(now) {
 resizeCanvas();
 checkMilestones();
 render();
+syncFromServer();
 requestAnimationFrame(gameLoop);
