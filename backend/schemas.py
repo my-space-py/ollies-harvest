@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     nickname: str
+    friend_code: str
 
     class Config:
         from_attributes = True  # SQLAlchemy 모델 객체를 그대로 응답에 변환 허용
@@ -43,9 +44,26 @@ class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
 
 
+class WeeklyLeaderboardEntry(BaseModel):
+    rank: int
+    nickname: str
+    weeklyHarvest: float
+
+
+class WeeklyLeaderboardResponse(BaseModel):
+    entries: list[WeeklyLeaderboardEntry]
+    myEntry: WeeklyLeaderboardEntry | None = None
+
+
+class FriendSearchResult(BaseModel):
+    user_id: int
+    nickname: str
+    friend_code: str
+
+
 class FriendRequestCreate(BaseModel):
     requester_id: int
-    target_username: str
+    target_friend_code: str
 
 
 class FriendRequestAction(BaseModel):
@@ -66,7 +84,9 @@ class FriendRequestListResponse(BaseModel):
 class FriendEntry(BaseModel):
     user_id: int
     nickname: str
-    consumed: float
+    gameLevel: int
+    gameLevelTitle: str
+    weeklyHarvest: float
 
 
 class FriendListResponse(BaseModel):
