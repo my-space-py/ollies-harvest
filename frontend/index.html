@@ -9,7 +9,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="stylesheet" href="./styles.css?v=29" />
   </head>
   <body>
     <main class="app" id="homeScreen">
@@ -120,6 +120,10 @@
           <button type="button" class="quick-menu-btn" data-quick="daily">
             <span class="quick-menu-icon"><img src="./assets/images/ui/ui_mission.png" alt="" /></span>
             <span class="quick-menu-label">오늘의 미션</span>
+          </button>
+          <button type="button" class="quick-menu-btn" data-quick="attendance">
+            <span class="quick-menu-icon quick-menu-icon-emoji" aria-hidden="true">📅</span>
+            <span class="quick-menu-label">출석</span>
           </button>
         </section>
 
@@ -348,10 +352,17 @@
       <button type="button" class="quick-dialog-close" data-close="dailyDialog">닫기</button>
     </dialog>
 
+    <dialog id="attendanceDialog" class="quick-dialog">
+      <h2>출석 보상</h2>
+      <p class="dialog-subtitle">접속한 날마다 하루씩 채워져요 · 최대 7일, 반복 없음</p>
+      <div id="attendanceList" class="card-list"></div>
+      <button type="button" class="quick-dialog-close" data-close="attendanceDialog">닫기</button>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./js/balance-config.js?v=3"></script>
-    <script src="./game.js?v=18"></script>
+    <script src="./js/balance-config.js?v=4"></script>
+    <script src="./game.js?v=19"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -402,6 +413,7 @@
         event: "eventDialog",
         notice: "noticeDialog",
         daily: "dailyDialog",
+        attendance: "attendanceDialog",
       };
 
       function sizeQuickDialog(dialog, quickKey) {
