@@ -9,7 +9,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=7" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
   </head>
   <body>
     <main class="app" id="homeScreen">
@@ -20,8 +20,8 @@
           <div class="profile">
             <img class="portrait" src="./assets/images/characters/ollie_portrait.png" alt="올리" />
             <div>
-              <strong id="levelLabel">Lv. 1</strong>
-              <div class="xp-track" aria-label="경험치">
+              <strong id="levelLabel">LV.1 새싹 농부</strong>
+              <div class="xp-track" aria-label="다음 게임 LV까지 진행도">
                 <span id="xpBar"></span>
               </div>
             </div>
@@ -51,25 +51,56 @@
         </header>
 
         <section class="hero-stats" aria-label="핵심 지표">
-          <div class="primary-stat">
-            <span>보유 쌀알</span>
-            <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="rice" class="stat-value">0g</span></strong>
+          <div class="stat-pill">
+            <div class="stat-cell">
+              <div class="stat-cell-head">
+                <span class="stat-icon-circle"><img src="./assets/images/crops/rice_grain.png" alt="" /></span>
+                <span class="stat-cell-label">보유 쌀알</span>
+              </div>
+              <strong id="rice" class="stat-cell-value">0g</strong>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-cell">
+              <div class="stat-cell-head">
+                <span class="stat-icon-circle"><img src="./assets/images/crops/rice_grain.png" alt="" /></span>
+                <span class="stat-cell-label">초당 수확량</span>
+              </div>
+              <strong id="perSecond" class="stat-cell-value">0g/s</strong>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-cell">
+              <div class="stat-cell-head">
+                <span class="stat-icon-circle"><img src="./assets/images/crops/rice_grain.png" alt="" /></span>
+                <span class="stat-cell-label">클릭당 수확량</span>
+              </div>
+              <strong id="tapValue" class="stat-cell-value">+0g</strong>
+            </div>
           </div>
-          <div hidden>
-            <span>누적 쌀 소비량</span>
-            <strong id="consumed">0g</strong>
+
+          <div class="booster-widget">
+            <div class="booster-box">
+              <img class="booster-box-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+              <span class="booster-box-label">비료<br />(부스터)</span>
+              <strong id="boosterCountValue" class="booster-box-count">x0</strong>
+            </div>
           </div>
-          <div hidden>
-            <span>인기도</span>
-            <strong id="popularity">0</strong>
+        </section>
+
+        <!-- 비료 부스터 상태 패널: 활성화 여부에 따라 문구/색상이 바뀜 (JS renderStats에서 갱신) -->
+        <section id="boosterStatusPanel" class="booster-status-panel" aria-label="비료 부스터 상태">
+          <div class="booster-status-icon">
+            <img src="./assets/images/crops/rice_grain.png" alt="" />
           </div>
-          <div class="primary-stat">
-            <span>초당 수확</span>
-            <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="perSecond" class="stat-value">15g/s</span></strong>
+          <strong id="boosterStatusHeadline" class="booster-status-headline">비료 부스터 대기 중</strong>
+          <div class="booster-status-divider"></div>
+          <div class="booster-status-cell booster-status-cell-inline">
+            <span class="booster-status-label" id="boosterStatusLabel1">보유 개수</span>
+            <strong id="boosterStatusValue1" class="booster-status-value">x0</strong>
           </div>
-          <div class="primary-stat">
-            <span>클릭 수확</span>
-            <strong><img class="stat-icon" src="./assets/images/crops/rice_grain.png" alt="" /> <span id="tapValue" class="stat-value">+5g</span></strong>
+          <div class="booster-status-divider"></div>
+          <div class="booster-status-cell">
+            <span class="booster-status-label" id="boosterStatusLabel2">효과</span>
+            <strong id="boosterStatusValue2" class="booster-status-value">수확량 2배 · 60초</strong>
           </div>
         </section>
 
@@ -101,9 +132,28 @@
           <div id="floatLayer" class="float-layer" aria-hidden="true"></div>
         </section>
 
-        <!-- 성장 단계 스트립: 최종 목표/활성 효과 자리로 이동 -->
-        <section class="stage-strip" aria-label="성장 단계">
-          <div id="stageList" class="stage-list"></div>
+        <!-- 하단 네비게이션 바로 위 위젯: 오늘의 문구 / 벼 성장 시각화 / 비료 사용 버튼 -->
+        <section class="home-footer-panel" aria-label="오늘의 문구, 벼 성장, 비료 사용">
+          <div class="phrase-card" id="dailyPhraseCard">
+            <p id="dailyPhraseText">오늘 아침밥, 우리쌀로 시작하세요</p>
+          </div>
+
+          <div class="growth-card">
+            <div class="growth-card-title">
+              <strong id="growthStageTitle">1단계 벼 성장</strong>
+              <span class="growth-card-icon" aria-hidden="true">🌱</span>
+            </div>
+            <div class="growth-progress-track">
+              <span id="growthProgressBar" class="growth-progress-fill" style="width: 0%"></span>
+              <span id="growthProgressLabel" class="growth-progress-label">0 / 0</span>
+            </div>
+            <p id="growthNextHint" class="growth-next-hint">다음 단계까지 필요한 쌀알: 0</p>
+          </div>
+
+          <button id="useBoosterButton" type="button" class="fertilizer-button" disabled>
+            <img src="./assets/images/crops/rice_grain.png" alt="" />
+            <span>비료 사용</span>
+          </button>
         </section>
 
         <!-- 최종 목표 / 활성 효과: 항상 숨김 (요청에 따라 비활성화) -->
@@ -122,35 +172,23 @@
         </section>
       </section>
 
-      <aside class="panel" aria-label="성장 메뉴">
-        <!-- 레시피 섹션: 항상 숨김 (요청에 따라 비활성화) -->
-        <section class="panel-section" id="recipeSection" hidden>
-          <div class="section-title">
-            <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
-            <span id="recipeCount">0/5 해금</span>
-          </div>
-          <div id="recipeList" class="card-list"></div>
-        </section>
-
-        <!-- 소비 마일스톤 섹션: 항상 숨김 (요청에 따라 비활성화) -->
-        <section class="panel-section" id="milestoneSection" hidden>
-          <div class="section-title">
-            <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />소비 마일스톤</h2>
-            <span>쌀을 즐기는 여정</span>
-          </div>
-          <div id="milestoneList" class="milestones"></div>
-        </section>
-      </aside>
     </main>
 
-    <!-- 업그레이드 화면: 하단 네비게이션 '업그레이드' 버튼을 누르면 표시됨 -->
+    <!-- 업그레이드 화면: 하단 네비게이션 '업그레이드' 버튼을 누르면 표시됨 (수동/자동 장비 + 레시피 통합) -->
     <section id="upgradeScreen" class="app-screen" hidden aria-label="업그레이드">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2><img src="./assets/images/ui/ui_upgrade.png" alt="" />업그레이드</h2>
-          <span>생산과 소비 강화</span>
+          <span>수확 장비 강화</span>
         </div>
-        <div id="upgradeList" class="card-list"></div>
+        <div id="upgradeList" class="tool-card-list"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
+          <span id="recipeCount">0/5 해금</span>
+        </div>
+        <div id="recipeQtyButtons" class="qty-selector" aria-label="레시피 구매 수량"></div>
+        <div id="recipeList" class="card-list"></div>
       </div>
     </section>
 
@@ -158,56 +196,136 @@
     <section id="missionScreen" class="app-screen" hidden aria-label="미션">
       <div class="panel-section screen-inner">
         <div class="section-title">
-          <h2><img src="./assets/images/ui/ui_mission.png" alt="" />미션</h2>
-          <span>초반 동선</span>
+          <h2><img src="./assets/images/ui/ui_mission.png" alt="" />오늘의 미션</h2>
+          <span>매일 자정(로컬 기준) 초기화</span>
         </div>
         <div id="missionList" class="card-list"></div>
       </div>
     </section>
 
-    <!-- 랭킹 화면: 아직 내용 없음 -->
+    <!-- 통계 화면: 하단 네비게이션 '통계' 버튼을 누르면 표시됨 -->
+    <section id="statsScreen" class="app-screen" hidden aria-label="통계">
+      <div class="panel-section screen-inner">
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_stats.png" alt="" />통계</h2>
+          <span>올리의 성장 기록</span>
+        </div>
+        <div id="statsSummary" class="stats-grid"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />배경</h2>
+          <span>누적 소비량에 따라 자라나는 논</span>
+        </div>
+        <div id="stageList" class="stage-list"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_upgrade.png" alt="" />업그레이드 보유 현황</h2>
+        </div>
+        <div id="statsUpgradeList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2><img src="./assets/images/ui/ui_milestone.png" alt="" />소비 마일스톤</h2>
+          <span>쌀을 즐기는 여정</span>
+        </div>
+        <div id="milestoneList" class="milestones"></div>
+      </div>
+    </section>
+
+    <!-- 랭킹 화면: 하단 네비게이션 '랭킹' 버튼을 누르면 표시되며, 탭 클릭 시 서버에서 목록을 불러옴 -->
     <section id="rankingScreen" class="app-screen" hidden aria-label="랭킹">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>랭킹</h2>
+          <span>주간 누적 수확량 (TOP 20)</span>
         </div>
-        <p class="screen-placeholder">준비 중입니다.</p>
+        <p id="myWeeklyRank" class="my-rank-line"></p>
+        <div id="rankingList" class="card-list"></div>
       </div>
     </section>
 
-    <!-- 친구 화면: 아직 내용 없음 -->
+    <!-- 친구 화면: 하단 네비게이션 '친구' 버튼을 누르면 표시되며, 탭 클릭 시 요청/친구 목록을 불러옴 -->
     <section id="friendsScreen" class="app-screen" hidden aria-label="친구">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>친구</h2>
+          <span>친구 코드로 친구 추가</span>
         </div>
-        <p class="screen-placeholder">준비 중입니다.</p>
+        <p class="my-friend-code">내 친구 코드: <strong id="myFriendCode">-</strong></p>
+        <form id="friendRequestForm" class="friend-request-form">
+          <input type="text" id="friendCodeInput" placeholder="친구 코드 입력 (예: A1B2C3D4)" autocomplete="off" />
+          <button type="submit">요청 보내기</button>
+        </form>
+        <p id="friendRequestMessage" class="friend-request-message"></p>
+
+        <div class="section-title">
+          <h2>받은 친구 요청</h2>
+        </div>
+        <div id="friendRequestList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2>친구 순위표</h2>
+          <span>주간 누적 수확량 기준</span>
+        </div>
+        <div id="friendList" class="card-list"></div>
       </div>
     </section>
 
     <!-- 하단 소프트키 네비게이션 -->
     <nav class="bottom-nav" aria-label="화면 이동">
-      <button type="button" class="nav-btn active" data-tab="home">홈</button>
-      <button type="button" class="nav-btn" data-tab="upgrade">업그레이드</button>
-      <button type="button" class="nav-btn" data-tab="mission">미션</button>
-      <button type="button" class="nav-btn" data-tab="ranking">랭킹</button>
-      <button type="button" class="nav-btn" data-tab="friends">친구</button>
+      <button type="button" class="nav-btn active" data-tab="home">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">홈</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="upgrade">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">업그레이드</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="mission">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">미션</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="stats">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">통계</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="ranking">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">랭킹</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="friends">
+        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <span class="nav-btn-label">친구</span>
+      </button>
     </nav>
 
+    <!-- 게임 LV 1~12 전체 마일스톤 팝업: 홈 화면 상단 LV 라벨 클릭 시 열림 -->
+    <dialog id="levelDialog" class="level-dialog">
+      <button id="closeLevelDialogButton" type="button" class="dialog-close-btn" aria-label="닫기">×</button>
+      <h2>게임 LV</h2>
+      <div id="levelDialogList" class="card-list"></div>
+    </dialog>
+
     <dialog id="festivalDialog" class="festival-dialog">
-      <img class="festival-badge" src="./assets/images/badges/festival_badge.png" alt="작은 쌀 축제 달성 배지" />
-      <h2>작은 쌀 축제 개최!</h2>
+      <img class="festival-badge" src="./assets/images/badges/festival_badge.png" alt="게임 LV.12 달성 배지" />
+      <h2>LV.12 신농 달성!</h2>
       <p>
-        작은 논에서 시작된 올리의 수확이 모두의 축제가 되었어요.
-        이제 100kg 지역 대표 쌀 축제를 향한 다음 여정이 열립니다.
+        작은 논에서 시작된 올리의 수확이 신농의 경지에 이르렀어요.
+        전체 수확량이 영구히 +10% 증가했습니다.
       </p>
       <button id="closeFestivalButton" type="button">계속 수확하기</button>
     </dialog>
 
     <!-- 바로가기 팝업 4종: 아직 내용 없음, 크기만 지정된 상태 -->
-    <dialog id="storageDialog" class="quick-dialog">
+    <dialog id="storageDialog" class="quick-dialog storage-dialog">
       <h2>창고</h2>
-      <p class="quick-dialog-body">준비 중입니다.</p>
+      <p class="dialog-subtitle">레시피 도감 · 성장 기록</p>
+
+      <div class="storage-section-title">레시피 도감</div>
+      <div id="storageRecipeList" class="storage-recipe-grid"></div>
+
+      <div class="storage-section-title">성장 보상 기록</div>
+      <div id="storageLevelList" class="storage-level-list"></div>
+
       <button type="button" class="quick-dialog-close" data-close="storageDialog">닫기</button>
     </dialog>
 
@@ -225,13 +343,15 @@
 
     <dialog id="dailyDialog" class="quick-dialog">
       <h2>오늘의 미션</h2>
-      <p class="quick-dialog-body">준비 중입니다.</p>
+      <p class="dialog-subtitle">매일 자정(로컬 기준) 초기화</p>
+      <div id="missionDialogList" class="card-list"></div>
       <button type="button" class="quick-dialog-close" data-close="dailyDialog">닫기</button>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./game.js?v=4"></script>
+    <script src="./js/balance-config.js?v=3"></script>
+    <script src="./game.js?v=18"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -244,6 +364,7 @@
         home: document.getElementById("homeScreen"),
         upgrade: document.getElementById("upgradeScreen"),
         mission: document.getElementById("missionScreen"),
+        stats: document.getElementById("statsScreen"),
         ranking: document.getElementById("rankingScreen"),
         friends: document.getElementById("friendsScreen"),
       };
@@ -260,14 +381,22 @@
       }
 
       navButtons.forEach((btn) => {
-        btn.addEventListener("click", () => showTab(btn.dataset.tab));
+        btn.addEventListener("click", () => {
+          showTab(btn.dataset.tab);
+          if (btn.dataset.tab === "ranking" && typeof window.loadLeaderboard === "function") {
+            window.loadLeaderboard();
+          }
+          if (btn.dataset.tab === "friends" && typeof window.loadFriendsScreen === "function") {
+            window.loadFriendsScreen();
+          }
+        });
       });
 
       showTab("home");
     </script>
     <script>
       // 바로가기 메뉴(창고/이벤트/공지/오늘의 미션): 각각의 팝업 열기
-      // 팝업 크기: 세로 = '창고' 버튼 ~ '모내기' 카드, 가로 = '모내기' ~ '작은 쌀 축제' 카드 사이 실측 거리
+      // 팝업 크기: 세로 = '창고' 버튼 ~ 하단 위젯 패널(문구/벼 성장/비료 사용) 상단 사이 실측 거리, 가로 = 그 패널의 실제 너비
       const quickDialogIds = {
         storage: "storageDialog",
         event: "eventDialog",
@@ -277,15 +406,14 @@
 
       function sizeQuickDialog(dialog, quickKey) {
         const btn = document.querySelector(`.quick-menu-btn[data-quick="${quickKey}"]`);
-        const stages = document.querySelectorAll("#stageList .stage");
-        if (!btn || stages.length < 2) return; // 측정 불가 시 CSS 기본값(근사치) 사용
+        const footerPanel = document.querySelector(".home-footer-panel");
+        if (!btn || !footerPanel) return; // 측정 불가 시 CSS 기본값(근사치) 사용
 
         const btnRect = btn.getBoundingClientRect();
-        const firstStage = stages[0].getBoundingClientRect(); // 모내기
-        const lastStage = stages[stages.length - 1].getBoundingClientRect(); // 작은 쌀 축제
+        const panelRect = footerPanel.getBoundingClientRect(); // 문구/벼 성장/비료 사용 패널 (홈 화면 맨 아래)
 
-        const height = Math.round(firstStage.top - btnRect.top);
-        const width = Math.round(lastStage.right - firstStage.left);
+        const height = Math.round(panelRect.top - btnRect.top);
+        const width = Math.round(panelRect.width);
 
         dialog.style.width = `${Math.min(Math.max(width, 260), window.innerWidth * 0.92)}px`;
         dialog.style.height = `${Math.min(Math.max(height, 220), window.innerHeight * 0.85)}px`;

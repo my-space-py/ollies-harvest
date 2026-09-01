@@ -1,14 +1,53 @@
+import json
+import random
+import string
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import and_, or_, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
 import models
 import schemas
 from database import engine, get_db
+from game_levels import get_level_by_consumed, get_current_week_key
 
 # 서버 시작 시 테이블이 없으면 자동 생성
 models.Base.metadata.create_all(bind=engine)
+
+
+def _ensure_friend_code_column():
+    """기존 SQLite DB(users 테이블)에 friend_code 컬럼이 없으면 추가하고,
+    이미 있는 계정에는 코드를 새로 발급한다. (create_all은 새 컬럼을 추가해주지 않음)"""
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("SELECT friend_code FROM users LIMIT 1"))
+        except OperationalError:
+            conn.execute(text("ALTER TABLE users ADD COLUMN friend_code VARCHAR"))
+            conn.commit()
+
+    with Session(engine) as db:
+        users_without_code = db.query(models.User).filter(
+            or_(models.User.friend_code.is_(None), models.User.friend_code == "")
+        ).all()
+        for user in users_without_code:
+            user.friend_code = _generate_friend_code(db)
+        if users_without_code:
+            db.commit()
+
+
+def _generate_friend_code(db: Session) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    while True:
+        code = "".join(random.choices(alphabet, k=8))
+        exists = db.query(models.User).filter(models.User.friend_code == code).first()
+        if not exists:
+            return code
+
+
+_ensure_friend_code_column()
 
 app = FastAPI(title="Auth API")
 
@@ -39,6 +78,7 @@ def signup(payload: schemas.SignupRequest, db: Session = Depends(get_db)):
         username=payload.username,
         nickname=payload.nickname,
         hashed_password=hashed_pw,
+        friend_code=_generate_friend_code(db),
     )
     db.add(new_user)
     db.commit()
@@ -57,5 +97,223 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 @app.get("/")
 def root():
     return {"message": "Auth API가 정상 동작 중입니다."}
+
+
+# 주의: user_id를 별도 토큰 검증 없이 그대로 신뢰한다 (TODO.md 4.3 참고).
+# 공모전 프로토타입 범위의 의도적인 단순화이며, 다른 사용자의 user_id를 알면
+# 그 사람의 저장 데이터를 덮어쓸 수 있는 보안 위험이 있다는 점을 인지하고 있어야 한다.
+
+
+@app.get("/save", response_model=schemas.SaveResponse)
+def get_save(user_id: int, db: Session = Depends(get_db)):
+    save = db.query(models.GameSave).filter(models.GameSave.user_id == user_id).first()
+    if not save:
+        raise HTTPException(status_code=404, detail="저장된 게임 데이터가 없습니다.")
+    return schemas.SaveResponse(user_id=save.user_id, data=json.loads(save.data))
+
+
+@app.put("/save", response_model=schemas.SaveResponse)
+def put_save(payload: schemas.SaveRequest, db: Session = Depends(get_db)):
+    save = db.query(models.GameSave).filter(models.GameSave.user_id == payload.user_id).first()
+    data_json = json.dumps(payload.data)
+
+    if save:
+        save.data = data_json
+    else:
+        save = models.GameSave(user_id=payload.user_id, data=data_json)
+        db.add(save)
+
+    db.commit()
+    db.refresh(save)
+    return schemas.SaveResponse(user_id=save.user_id, data=json.loads(save.data))
+
+
+@app.get("/leaderboard", response_model=schemas.LeaderboardResponse)
+def get_leaderboard(limit: int = 20, db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.GameSave, models.User)
+        .join(models.User, models.GameSave.user_id == models.User.id)
+        .all()
+    )
+
+    ranked = []
+    for save, user in rows:
+        try:
+            data = json.loads(save.data)
+        except (TypeError, ValueError):
+            continue
+        ranked.append({"nickname": user.nickname, "consumed": float(data.get("consumed") or 0)})
+
+    ranked.sort(key=lambda entry: entry["consumed"], reverse=True)
+
+    entries = [
+        schemas.LeaderboardEntry(rank=index + 1, nickname=entry["nickname"], consumed=entry["consumed"])
+        for index, entry in enumerate(ranked[:limit])
+    ]
+    return schemas.LeaderboardResponse(entries=entries)
+
+
+def _extract_weekly_harvest(data: dict) -> float:
+    """저장된 weekKey가 이번 주와 다르면(그 사이 접속을 안 해서 리셋이 안 된 경우)
+    랭킹 계산에서는 0으로 취급한다. 클라이언트는 다음 접속 시 자체적으로 리셋한다."""
+    if data.get("weekKey") != get_current_week_key():
+        return 0.0
+    return float(data.get("weeklyHarvest") or 0)
+
+
+@app.get("/leaderboard/weekly", response_model=schemas.WeeklyLeaderboardResponse)
+def get_weekly_leaderboard(limit: int = 20, user_id: int | None = None, db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.GameSave, models.User)
+        .join(models.User, models.GameSave.user_id == models.User.id)
+        .all()
+    )
+
+    ranked = []
+    my_row = None
+    for save, user in rows:
+        try:
+            data = json.loads(save.data)
+        except (TypeError, ValueError):
+            continue
+        harvest = _extract_weekly_harvest(data)
+        entry = {"user_id": user.id, "nickname": user.nickname, "weeklyHarvest": harvest}
+        ranked.append(entry)
+        if user_id is not None and user.id == user_id:
+            my_row = entry
+
+    ranked.sort(key=lambda entry: entry["weeklyHarvest"], reverse=True)
+
+    entries = [
+        schemas.WeeklyLeaderboardEntry(rank=index + 1, nickname=entry["nickname"], weeklyHarvest=entry["weeklyHarvest"])
+        for index, entry in enumerate(ranked[:limit])
+    ]
+
+    my_entry = None
+    if my_row is not None:
+        my_rank = next((index + 1 for index, entry in enumerate(ranked) if entry["user_id"] == my_row["user_id"]), None)
+        if my_rank is not None:
+            my_entry = schemas.WeeklyLeaderboardEntry(rank=my_rank, nickname=my_row["nickname"], weeklyHarvest=my_row["weeklyHarvest"])
+
+    return schemas.WeeklyLeaderboardResponse(entries=entries, myEntry=my_entry)
+
+
+@app.get("/friends/search", response_model=schemas.FriendSearchResult)
+def search_friend_by_code(code: str, db: Session = Depends(get_db)):
+    target = db.query(models.User).filter(models.User.friend_code == code.strip().upper()).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="해당 친구 코드의 사용자를 찾을 수 없습니다.")
+    return schemas.FriendSearchResult(user_id=target.id, nickname=target.nickname, friend_code=target.friend_code)
+
+
+@app.post("/friends/request")
+def send_friend_request(payload: schemas.FriendRequestCreate, db: Session = Depends(get_db)):
+    requester = db.query(models.User).filter(models.User.id == payload.requester_id).first()
+    if not requester:
+        raise HTTPException(status_code=404, detail="요청자 계정을 찾을 수 없습니다.")
+
+    target = db.query(models.User).filter(models.User.friend_code == payload.target_friend_code.strip().upper()).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="해당 친구 코드의 사용자를 찾을 수 없습니다.")
+    if target.id == requester.id:
+        raise HTTPException(status_code=400, detail="자기 자신에게는 친구 요청을 보낼 수 없습니다.")
+
+    existing = (
+        db.query(models.Friendship)
+        .filter(
+            or_(
+                and_(models.Friendship.requester_id == requester.id, models.Friendship.addressee_id == target.id),
+                and_(models.Friendship.requester_id == target.id, models.Friendship.addressee_id == requester.id),
+            )
+        )
+        .first()
+    )
+    if existing:
+        detail = "이미 친구입니다." if existing.status == "accepted" else "이미 대기 중인 친구 요청이 있습니다."
+        raise HTTPException(status_code=400, detail=detail)
+
+    friendship = models.Friendship(requester_id=requester.id, addressee_id=target.id, status="pending")
+    db.add(friendship)
+    db.commit()
+    return {"message": f"{target.nickname}님에게 친구 요청을 보냈습니다."}
+
+
+@app.get("/friends/requests", response_model=schemas.FriendRequestListResponse)
+def list_friend_requests(user_id: int, db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.Friendship, models.User)
+        .join(models.User, models.Friendship.requester_id == models.User.id)
+        .filter(models.Friendship.addressee_id == user_id, models.Friendship.status == "pending")
+        .all()
+    )
+    requests = [
+        schemas.FriendRequestEntry(request_id=friendship.id, requester_id=user.id, requester_nickname=user.nickname)
+        for friendship, user in rows
+    ]
+    return schemas.FriendRequestListResponse(requests=requests)
+
+
+@app.post("/friends/accept")
+def accept_friend_request(payload: schemas.FriendRequestAction, db: Session = Depends(get_db)):
+    friendship = db.query(models.Friendship).filter(models.Friendship.id == payload.request_id).first()
+    if not friendship or friendship.addressee_id != payload.user_id:
+        raise HTTPException(status_code=404, detail="친구 요청을 찾을 수 없습니다.")
+
+    friendship.status = "accepted"
+    db.commit()
+    return {"message": "친구 요청을 수락했습니다."}
+
+
+@app.post("/friends/decline")
+def decline_friend_request(payload: schemas.FriendRequestAction, db: Session = Depends(get_db)):
+    friendship = db.query(models.Friendship).filter(models.Friendship.id == payload.request_id).first()
+    if not friendship or friendship.addressee_id != payload.user_id:
+        raise HTTPException(status_code=404, detail="친구 요청을 찾을 수 없습니다.")
+
+    db.delete(friendship)
+    db.commit()
+    return {"message": "친구 요청을 거절했습니다."}
+
+
+@app.get("/friends", response_model=schemas.FriendListResponse)
+def list_friends(user_id: int, db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.Friendship)
+        .filter(
+            models.Friendship.status == "accepted",
+            or_(models.Friendship.requester_id == user_id, models.Friendship.addressee_id == user_id),
+        )
+        .all()
+    )
+    friend_ids = [row.addressee_id if row.requester_id == user_id else row.requester_id for row in rows]
+
+    entries = []
+    for friend_id in friend_ids:
+        user = db.query(models.User).filter(models.User.id == friend_id).first()
+        if not user:
+            continue
+        save = db.query(models.GameSave).filter(models.GameSave.user_id == friend_id).first()
+        consumed = 0.0
+        weekly_harvest = 0.0
+        if save:
+            try:
+                data = json.loads(save.data)
+                consumed = float(data.get("consumed") or 0)
+                weekly_harvest = _extract_weekly_harvest(data)
+            except (TypeError, ValueError):
+                pass
+        level_info = get_level_by_consumed(consumed)
+        entries.append(
+            schemas.FriendEntry(
+                user_id=user.id,
+                nickname=user.nickname,
+                gameLevel=level_info["level"],
+                gameLevelTitle=level_info["title"],
+                weeklyHarvest=weekly_harvest,
+            )
+        )
+
+    entries.sort(key=lambda entry: entry.weeklyHarvest, reverse=True)
+    return schemas.FriendListResponse(friends=entries)
 
 
