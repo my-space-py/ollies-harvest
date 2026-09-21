@@ -1286,17 +1286,19 @@ h2 {
   display: none;
 }
 
-/* 창고/이벤트/공지/오늘의 미션 바로가기 버튼 */
+/* 창고/이벤트/공지/오늘의 미션/출석 바로가기 버튼 */
 .quick-menu {
   display: flex;
+  flex-wrap: wrap; /* 5번째 버튼(출석) 추가로 좁은 화면에서 한 줄에 다 안 들어가면 다음 줄로 */
   justify-content: center;
-  gap: 42px; /* 기존 14px의 3배 */
+  gap: 28px 42px; /* 기존 14px의 3배 (줄바꿈 시 세로 간격은 좀 더 좁게) */
   max-width: 780px; /* hero-stats(최대 860px)보다 살짝 좁게 */
   margin: 0 auto 14px;
   padding: 0 20px;
 }
 
 .quick-menu-btn {
+  position: relative; /* has-badge 알림 점 위치 기준 */
   flex: 0 0 auto; /* JS가 지정하는 정확한 크기를 유지 (hero-stats 세로 길이와 동일) */
   aspect-ratio: 1;
   display: flex;
@@ -1314,6 +1316,19 @@ h2 {
   box-shadow: 0 6px 14px rgba(109, 75, 18, 0.12);
 }
 
+/* 받을 수 있는 보상이 있을 때(예: 출석) 표시하는 알림 점 */
+.quick-menu-btn.has-badge::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5b5b;
+  box-shadow: 0 0 0 2px var(--card);
+}
+
 .quick-menu-icon {
   display: flex;
   align-items: center;
@@ -1328,6 +1343,11 @@ h2 {
   object-fit: contain;
 }
 
+.quick-menu-icon-emoji {
+  font-size: 28px;
+  line-height: 1;
+}
+
 .quick-menu-label {
   line-height: 1.2;
   text-align: center;
@@ -1339,7 +1359,7 @@ h2 {
 
 @media (max-width: 460px) {
   .quick-menu {
-    gap: 24px;
+    gap: 16px 24px;
     padding: 0 14px;
   }
 
@@ -1351,6 +1371,10 @@ h2 {
   .quick-menu-icon {
     width: 32px;
     height: 32px;
+  }
+
+  .quick-menu-icon-emoji {
+    font-size: 20px;
   }
 }
 
