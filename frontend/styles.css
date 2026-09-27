@@ -163,6 +163,20 @@ button {
   filter: drop-shadow(0 8px 12px rgba(86, 55, 10, 0.2));
 }
 
+.logo-button {
+  display: grid;
+  place-items: center;
+  width: min(100%, 520px);
+  padding: 0;
+  background: transparent;
+  touch-action: manipulation;
+}
+
+.logo-button:focus-visible {
+  outline: 2px solid var(--leaf-dark);
+  outline-offset: 4px;
+}
+
 h1,
 h2,
 p {
@@ -700,20 +714,70 @@ h2 {
 }
 
 .milestones {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 12px 4px 18px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  cursor: grab;
+  user-select: none;
+  scrollbar-color: var(--leaf) var(--cream);
 }
 
 .milestone {
+  flex: 0 0 220px;
   display: grid;
-  gap: 4px;
-  padding: 10px;
+  align-content: start;
+  gap: 10px;
+  min-height: 170px;
+  padding: 16px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
+  scroll-snap-align: center;
 }
 
 .milestone.done {
   background: rgba(118, 188, 61, 0.25);
+  border-color: var(--leaf);
+}
+
+.milestone.current {
+  border: 2px solid var(--orange);
+  background: var(--cream);
+}
+
+.milestone.locked {
+  opacity: 0.58;
+}
+
+.milestone.done .milestone-status {
+  color: var(--leaf-dark);
+}
+
+.milestones.dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+}
+
+.milestone-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.harvest-crown::after {
+  content: "✦ 황금 수확 ✦";
+  position: absolute;
+  top: 12px;
+  padding: 6px 12px;
+  border: 1px solid #bb841c;
+  border-radius: 999px;
+  background: #fff0bd;
+  color: #81550b;
+  box-shadow: 0 0 20px #ffd86b;
+  font-weight: 900;
 }
 
 .progress-track {
@@ -1286,7 +1350,7 @@ h2 {
   display: none;
 }
 
-/* 창고/이벤트/공지/오늘의 미션 바로가기 버튼 */
+/* 올리의 기록/이벤트/공지/오늘의 미션 바로가기 버튼 */
 .quick-menu {
   display: flex;
   justify-content: center;
@@ -1354,9 +1418,9 @@ h2 {
   }
 }
 
-/* 바로가기 팝업(창고/이벤트/공지/오늘의 미션):
+/* 바로가기 팝업(올리의 기록/이벤트/공지/오늘의 미션):
    실제 크기는 index.html의 sizeQuickDialog()가 열릴 때마다 계산해서 인라인으로 지정함
-   (세로: '창고' 버튼~'모내기' 카드 실측, 가로: '모내기'~'작은 쌀 축제' 카드 실측).
+   (세로: '올리의 기록' 버튼~'모내기' 카드 실측, 가로: '모내기'~'작은 쌀 축제' 카드 실측).
    아래 값은 측정 실패 시(예: 스테이지 미렌더링)의 폴백 기본값. */
 .quick-dialog {
   width: min(90vw, 820px);
@@ -1397,7 +1461,7 @@ h2 {
 }
 
 /* ---------------------------------------------------------------------- */
-/* 창고 팝업: 레시피 도감 + 성장 보상 기록                                  */
+/* 올리의 기록 팝업: 레시피 도감 + 성장 보상 기록                                  */
 /* ---------------------------------------------------------------------- */
 .storage-dialog {
   height: auto;
@@ -1571,7 +1635,7 @@ body {
   border-radius: 14px;
   background: transparent;
   color: var(--muted);
-  font-size: 15px; /* 창고/이벤트/공지/오늘의 미션 버튼 글씨 크기와 동일 */
+  font-size: 15px; /* 올리의 기록/이벤트/공지/오늘의 미션 버튼 글씨 크기와 동일 */
   font-weight: 800;
   transition:
     background 160ms ease,
@@ -1754,4 +1818,88 @@ body {
 
 .my-friend-code strong {
   letter-spacing: 1px;
+}
+
+/* 시연 전용 관리자 패널: 문서 흐름 밖에 배치하여 기존 화면 크기를 유지 */
+.admin-panel {
+  position: absolute;
+  z-index: 10;
+  right: 24px;
+  width: 240px;
+  max-width: calc(100vw - 28px);
+  padding: 16px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--cream);
+  box-shadow: 0 10px 28px rgba(109, 75, 18, 0.22);
+}
+
+.admin-panel[hidden] {
+  display: none;
+}
+
+.admin-panel h2 {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.admin-panel button {
+  min-height: 38px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--card-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-quick-buttons,
+.admin-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.admin-quick-buttons button {
+  flex: 1;
+}
+
+.admin-panel label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.admin-input-row input,
+.admin-input-row select {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  font: inherit;
+}
+
+.admin-input-row input {
+  width: 100%;
+}
+
+.admin-panel form > button,
+#closeAdminButton {
+  width: 100%;
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .logo-button {
+    justify-self: start;
+    width: min(92vw, 430px);
+  }
+
+  .admin-panel {
+    position: fixed;
+    top: 100px !important;
+    right: 14px;
+    max-height: calc(100dvh - 180px);
+    overflow-y: auto;
+  }
 }
