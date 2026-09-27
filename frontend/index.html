@@ -9,7 +9,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=29" />
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <main class="app" id="homeScreen">
@@ -64,7 +64,7 @@
             <div class="stat-divider"></div>
             <div class="stat-cell">
               <div class="stat-cell-head">
-                <span class="stat-icon-circle"><img src="./assets/images/crops/rice_grain.png" alt="" /></span>
+                <span class="stat-icon-circle"><img src="./assets/images/ui/7_초당수확량.png" alt="" /></span>
                 <span class="stat-cell-label">초당 수확량</span>
               </div>
               <strong id="perSecond" class="stat-cell-value">0g/s</strong>
@@ -72,7 +72,7 @@
             <div class="stat-divider"></div>
             <div class="stat-cell">
               <div class="stat-cell-head">
-                <span class="stat-icon-circle"><img src="./assets/images/crops/rice_grain.png" alt="" /></span>
+                <span class="stat-icon-circle"><img src="./assets/images/ui/8_클릭당수확량.png" alt="" /></span>
                 <span class="stat-cell-label">클릭당 수확량</span>
               </div>
               <strong id="tapValue" class="stat-cell-value">+0g</strong>
@@ -81,7 +81,7 @@
 
           <div class="booster-widget">
             <div class="booster-box">
-              <img class="booster-box-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+              <img class="booster-box-icon" src="./assets/images/ui/9_부스터(비료).png" alt="" />
               <span class="booster-box-label">비료<br />(부스터)</span>
               <strong id="boosterCountValue" class="booster-box-count">x0</strong>
             </div>
@@ -91,7 +91,7 @@
         <!-- 비료 부스터 상태 패널: 활성화 여부에 따라 문구/색상이 바뀜 (JS renderStats에서 갱신) -->
         <section id="boosterStatusPanel" class="booster-status-panel" aria-label="비료 부스터 상태">
           <div class="booster-status-icon">
-            <img src="./assets/images/crops/rice_grain.png" alt="" />
+            <img src="./assets/images/ui/9_부스터(비료).png" alt="" />
           </div>
           <strong id="boosterStatusHeadline" class="booster-status-headline">비료 부스터 대기 중</strong>
           <div class="booster-status-divider"></div>
@@ -112,11 +112,11 @@
             <span class="quick-menu-label">올리의 기록</span>
           </button>
           <button type="button" class="quick-menu-btn" data-quick="event">
-            <span class="quick-menu-icon"></span>
+            <span class="quick-menu-icon"><img src="./assets/images/ui/3_이벤트.png" alt="" /></span>
             <span class="quick-menu-label">이벤트</span>
           </button>
           <button type="button" class="quick-menu-btn" data-quick="notice">
-            <span class="quick-menu-icon"></span>
+            <span class="quick-menu-icon"><img src="./assets/images/ui/4_공지.png" alt="" /></span>
             <span class="quick-menu-label">공지</span>
           </button>
           <button type="button" class="quick-menu-btn" data-quick="daily">
@@ -176,7 +176,7 @@
           </div>
 
           <button id="useBoosterButton" type="button" class="fertilizer-button" disabled>
-            <img src="./assets/images/crops/rice_grain.png" alt="" />
+            <img src="./assets/images/ui/9_부스터(비료).png" alt="" />
             <span>비료 사용</span>
           </button>
         </section>
@@ -299,27 +299,27 @@
     <!-- 하단 소프트키 네비게이션 -->
     <nav class="bottom-nav" aria-label="화면 이동">
       <button type="button" class="nav-btn active" data-tab="home">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/10_홈.png" alt="" />
         <span class="nav-btn-label">홈</span>
       </button>
       <button type="button" class="nav-btn" data-tab="upgrade">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/11_업그레이드.png" alt="" />
         <span class="nav-btn-label">업그레이드</span>
       </button>
       <button type="button" class="nav-btn" data-tab="mission">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/12_미션.png" alt="" />
         <span class="nav-btn-label">미션</span>
       </button>
       <button type="button" class="nav-btn" data-tab="stats">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/ui_stats.png" alt="" />
         <span class="nav-btn-label">통계</span>
       </button>
       <button type="button" class="nav-btn" data-tab="ranking">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/13_랭킹.png" alt="" />
         <span class="nav-btn-label">랭킹</span>
       </button>
       <button type="button" class="nav-btn" data-tab="friends">
-        <img class="nav-btn-icon" src="./assets/images/crops/rice_grain.png" alt="" />
+        <img class="nav-btn-icon" src="./assets/images/ui/14_친구.png" alt="" />
         <span class="nav-btn-label">친구</span>
       </button>
     </nav>
