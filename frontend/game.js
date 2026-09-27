@@ -102,8 +102,6 @@ const elements = {
   boosterCountValue: document.querySelector("#boosterCountValue"),
   useBoosterButton: document.querySelector("#useBoosterButton"),
   dailyPhraseText: document.querySelector("#dailyPhraseText"),
-  growthStageTitle: document.querySelector("#growthStageTitle"),
-  growthProgressBar: document.querySelector("#growthProgressBar"),
   growthProgressLabel: document.querySelector("#growthProgressLabel"),
   growthNextHint: document.querySelector("#growthNextHint"),
   boosterStatusPanel: document.querySelector("#boosterStatusPanel"),
@@ -940,28 +938,44 @@ function renderStats() {
 
 function renderDailyPhrase() {
   if (!elements.dailyPhraseText) return;
-  elements.dailyPhraseText.textContent = getDailyPhrase();
+  const phrase = getDailyPhrase();
+  if (elements.dailyPhraseText.textContent !== phrase) {
+    elements.dailyPhraseText.textContent = phrase;
+    fitDailyPhrase();
+  }
+}
+
+function fitDailyPhrase() {
+  const text = elements.dailyPhraseText;
+  const area = text?.parentElement;
+  if (!area || !area.clientWidth || !area.clientHeight) return;
+  // 간판의 안전 영역 안에 전체 문장이 들어가도록 축소 (생략/잘라내기 없음).
+  let size = 16;
+  text.style.fontSize = `${size}px`;
+  while (size > 6 && (text.scrollWidth > area.clientWidth || text.scrollHeight > area.clientHeight)) {
+    size -= 0.5;
+    text.style.fontSize = `${size}px`;
+  }
+}
+
+function setupPhraseSign() {
+  const card = document.querySelector("#dailyPhraseCard");
+  if (!card) return;
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(fitDailyPhrase).observe(card);
+  window.addEventListener("resize", fitDailyPhrase);
+  if (document.fonts?.ready) document.fonts.ready.then(fitDailyPhrase);
+  requestAnimationFrame(fitDailyPhrase);
 }
 
 function renderGrowthCard() {
-  if (!elements.growthStageTitle) return;
-  const stageIndex = BACKGROUND_STAGES.findIndex((stage) => stage.stage === state.backgroundStage);
-  const currentStage = BACKGROUND_STAGES[stageIndex] || BACKGROUND_STAGES[0];
-  const nextStage = BACKGROUND_STAGES[stageIndex + 1];
-
-  elements.growthStageTitle.textContent = `${currentStage.stage}단계 벼 성장`;
-
-  if (nextStage) {
-    const span = nextStage.threshold - currentStage.threshold;
-    const progressed = Math.max(0, state.consumed - currentStage.threshold);
-    const percent = span > 0 ? Math.min((progressed / span) * 100, 100) : 100;
-    elements.growthProgressBar.style.width = `${percent}%`;
-    elements.growthProgressLabel.textContent = `${formatWeight(progressed)} / ${formatWeight(span)}`;
-    elements.growthNextHint.textContent = `다음 단계까지 필요한 쌀알: ${formatWeight(Math.max(0, nextStage.threshold - state.consumed))}`;
+  if (!elements.growthNextHint) return;
+  const nextLevel = getNextGameLevel(state.level);
+  if (nextLevel) {
+    elements.growthProgressLabel.textContent = `${formatWeight(state.consumed)} / ${formatWeight(nextLevel.requiredConsumed)}`;
+    elements.growthNextHint.textContent = `다음 LV.${nextLevel.level}까지 필요한 쌀 소비량: ${formatWeight(Math.max(0, nextLevel.requiredConsumed - state.consumed))}`;
   } else {
-    elements.growthProgressBar.style.width = "100%";
-    elements.growthProgressLabel.textContent = "최고 단계";
-    elements.growthNextHint.textContent = "벼가 완전히 익었어요!";
+    elements.growthProgressLabel.textContent = "최고 LV 달성";
+    elements.growthNextHint.textContent = `누적 쌀 소비량: ${formatWeight(state.consumed)}`;
   }
 }
 
@@ -1464,6 +1478,7 @@ function gameLoop(now) {
 
 setupAdminMode();
 setupMilestoneDrag();
+setupPhraseSign();
 resizeCanvas();
 checkGameLevelUp();
 checkMilestones();

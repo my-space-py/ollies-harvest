@@ -923,23 +923,27 @@ h2 {
 }
 
 .phrase-card {
-  flex: 2 1 0;
-  min-width: 0;
-  display: grid;
-  place-items: center;
-  padding: 10px;
-  border: 2px solid rgba(210, 155, 42, 0.5);
-  border-radius: 14px;
-  background: rgba(255, 250, 226, 0.9);
+  position: relative;
+  flex: 2.6 1 0;
+  min-width: 180px;
+  aspect-ratio: 1183 / 1330;
+  align-self: center;
+  border: 0;
+  background: transparent;
   text-align: center;
 }
 
 .phrase-card p {
+  width: 100%;
   margin: 0;
-  color: var(--brown);
-  font-size: 13px;
+  color: #fff8df;
+  font-size: 16px;
   font-weight: 900;
-  line-height: 1.45;
+  line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  text-shadow: 0 1px 2px #70400d;
 }
 
 .growth-card {
@@ -1004,31 +1008,34 @@ h2 {
 
 .fertilizer-button {
   flex: 1 1 0;
-  min-width: 84px;
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  border: 2px solid rgba(75, 159, 36, 0.5);
-  border-radius: 16px;
-  background: linear-gradient(180deg, #8fca4a, #4b9f24);
-  color: #fff;
-  font-weight: 1000;
-  font-size: 13px;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 900;
+  font-size: 15px;
   text-align: center;
 }
 
 .fertilizer-button img {
-  width: 30px;
-  height: 30px;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
 }
 
 .fertilizer-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
-  background: #cfcfcf;
-  border-color: rgba(109, 75, 18, 0.25);
+  opacity: 0.45;
+  background: transparent;
+  border: 0;
   color: var(--muted);
 }
 
@@ -1623,7 +1630,7 @@ body {
   align-items: center;
   width: 100%;
   height: calc(76.8px + env(safe-area-inset-bottom, 0px));
-  padding: 9.6px 10px calc(9.6px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px));
   gap: 6px;
   background: var(--cream);
   border-top: 1px solid var(--line);
@@ -1919,7 +1926,6 @@ body {
   transform-origin: center;
 }
 
-.fertilizer-button img,
 .bottom-nav .nav-btn-icon {
   transform: scale(1.35);
   transform-origin: center bottom;
@@ -1952,4 +1958,245 @@ body {
     white-space: normal;
     word-break: keep-all;
   }
+}
+
+/* 하단 LV·표지판·비료 UI: 게임 데이터 및 배경 성장 로직은 그대로 유지 */
+.home-footer-panel {
+  align-items: center;
+}
+
+.phrase-sign {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.phrase-sign-copy {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 24%;
+  bottom: 34%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.growth-card {
+  align-self: center;
+}
+
+.growth-card-title {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+.growth-card-title:focus-visible,
+.fertilizer-button:focus-visible {
+  outline: 2px solid var(--leaf-dark);
+  outline-offset: 3px;
+}
+
+.booster-box-label {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hero-stats .booster-box-count {
+  font-size: 24px;
+  font-weight: 1000;
+  color: var(--text);
+}
+
+.bottom-nav .nav-btn {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+@media (max-width: 760px) {
+  .profile-spacer {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .home-footer-panel {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .phrase-card {
+    flex: 0 1 220px;
+  }
+  .growth-card {
+    flex: 1 1 220px;
+  }
+  .fertilizer-button {
+    flex: 0 0 104px;
+  }
+}
+
+@media (max-width: 460px) {
+  .booster-box-label {
+    font-size: 12px;
+  }
+}
+
+/* 좌우 트랙을 동일하게 유지해 LV 카드의 중심을 항상 화면 중앙에 고정 */
+.home-footer-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  gap: 12px;
+}
+
+.home-footer-panel .phrase-card {
+  grid-column: 1;
+  grid-row: 1;
+  width: min(100%, 132px);
+  min-width: 0;
+}
+
+.home-footer-panel .growth-card {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+}
+
+.home-footer-panel .fertilizer-button {
+  grid-column: 3;
+  grid-row: 1;
+  width: min(100%, 132px);
+  min-width: 0;
+  min-height: 148px;
+  padding: 12px 8px;
+  border: 2px solid #54812b;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff9de, #e5efbd);
+  box-shadow: 0 4px 0 #507b2c, 0 7px 12px rgba(69, 91, 27, 0.16);
+  color: var(--leaf-dark);
+  font-weight: 900;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  touch-action: manipulation;
+}
+
+.home-footer-panel .fertilizer-button img {
+  width: 76px;
+  max-width: 100%;
+  height: 76px;
+  object-fit: contain;
+}
+
+.home-footer-panel .fertilizer-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fffde9, #d8ec9e);
+  transform: translateY(-2px);
+}
+
+.home-footer-panel .fertilizer-button:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #507b2c;
+}
+
+.home-footer-panel .fertilizer-button:disabled {
+  opacity: 0.65;
+  border-color: #929581;
+  background: #eeeedf;
+  color: #747962;
+  box-shadow: 0 3px 0 #a0a38d;
+  cursor: not-allowed;
+}
+
+/* 작은 화면에서도 LV 중심을 유지하고, 멘트의 가독성을 확보 */
+@media (max-width: 600px) {
+  .home-footer-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-footer-panel .growth-card {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .home-footer-panel .phrase-card {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .home-footer-panel .fertilizer-button {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+}
+
+/* 하단 좌우 트랙과 LV 중앙 정렬은 유지하고 멘트 표지판만 132 → 198px */
+.home-footer-panel .phrase-card {
+  width: min(100%, 198px);
+}
+
+/* 상태(아이콘 포함) : 보유 개수 : 효과 = 3 : 2 : 3 */
+.booster-status-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) 1px minmax(0, 2fr) 1px minmax(0, 3fr);
+  column-gap: clamp(6px, 1.4vw, 12px);
+}
+
+.booster-status-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.booster-status-headline {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.booster-status-panel .booster-status-cell {
+  justify-content: center;
+  text-align: center;
+}
+
+.booster-status-cell-inline {
+  flex-wrap: wrap;
+}
+
+.booster-status-panel .booster-status-label,
+.booster-status-panel .booster-status-value {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .booster-status-panel {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .booster-status-headline,
+  #boosterStatusLabel1 {
+    font-size: 12px;
+  }
+  .booster-status-value {
+    font-size: 13px;
+  }
+}
+
+/* 상태 패널 바깥 좌우 여백을 동일하게 적용 */
+.booster-status-panel {
+  padding-inline: clamp(10px, 2vw, 18px);
 }
