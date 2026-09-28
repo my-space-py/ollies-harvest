@@ -68,52 +68,85 @@ const TOOL_CONFIG = {
 };
 
 // ----------------------------------------------------------------------------
-// 3. 레시피 (5종 고정) — 인기도는 내부 재화로만 유지, 화면에 크게 노출하지 않음
+// 3. 레시피 (5종 고정) — 누적 쌀 소비량으로 해금
 // ----------------------------------------------------------------------------
 // cost: 1개 소비 시 쌀알 소비량 (수량 선택 시 qty배)
-// unlockPopularity: 해금에 필요한 인기도 (내부 재화)
-// popularity: 1회 사용 시 획득 인기도
-// buff: 타임 버프 { type: 'click' | 'auto', multiplier, duration(초) }
-// autoMultiplierBonus: 영구 자동수확 배율 보너스(1회당, qty배 적용)
+// unlockConsumed: 해금에 필요한 누적 쌀 소비량(g)
+// buff: 배율은 고정, duration(초) × 제작 수량만큼 남은 시간에 누적
+// boosterDurationBonusSeconds: 다음 부스터 1회에 사용할 추가 시간(수량 비례)
+// boosterMultiplierBonus: 다음 부스터 배율 가산값(수량만큼 강화 사용 횟수 적립)
 const RECIPES = [
   {
     id: "meal", name: "밥 짓기", icon: "./assets/images/recipes/recipe_rice_bowl.png",
-    cost: 150, unlockPopularity: 0, popularity: 3,
-    note: "부스터 지속시간 +10%(1회 사용당 20초, 최대 누적 없음)",
+    cost: 150, unlockConsumed: 0,
     message: "올리가 따뜻한 밥 한 그릇을 지었어요.",
-    boosterDurationBonusSeconds: 20,
+    boosterDurationBonusSeconds: 60,
   },
   {
     id: "kimbap", name: "김밥 만들기", icon: "./assets/images/recipes/recipe_kimbap.png",
-    cost: 120, unlockPopularity: 10, popularity: 4,
-    buff: { type: "click", multiplier: 1.5, duration: 30 },
-    note: "30초간 클릭 수확 +50%",
+    cost: 120, unlockConsumed: 600,
+    buff: { type: "click", multiplier: 3, duration: 30 },
     message: "올리의 김밥이 소풍길에 인기를 얻었어요.",
   },
   {
     id: "tteok", name: "떡 만들기", icon: "./assets/images/recipes/recipe_tteok.png",
-    cost: 250, unlockPopularity: 25, popularity: 8,
-    buff: { type: "auto", multiplier: 1.5, duration: 30 },
-    note: "30초간 자동 수확 +50%",
+    cost: 250, unlockConsumed: 1200,
+    buff: { type: "auto", multiplier: 3, duration: 30 },
     message: "마을 사람들이 떡을 나누며 올리를 도와주기 시작했어요.",
   },
   {
     id: "bread", name: "쌀빵 굽기", icon: "./assets/images/recipes/recipe_rice_bread.png",
-    cost: 300, unlockPopularity: 45, popularity: 15,
-    note: "부스터 지속시간 추가 증가(1회 사용당 40초)",
+    cost: 300, unlockConsumed: 2500,
     message: "쌀빵이 새 손님들의 관심을 끌었어요.",
-    boosterDurationBonusSeconds: 40,
+    boosterMultiplierBonus: 0.5,
   },
   {
     id: "nurungji", name: "누룽지 만들기", icon: "./assets/images/recipes/recipe_nurungji.png",
-    cost: 200, unlockPopularity: 70, popularity: 6,
-    buff: { type: "all", multiplier: 1.3, duration: 45 },
-    note: "45초간 전체 생산량 +30%",
+    cost: 200, unlockConsumed: 5000,
+    buff: { type: "all", multiplier: 2, duration: 45 },
     message: "남은 밥도 고소한 누룽지가 되었어요.",
   },
 ];
 
 const RECIPE_QUANTITY_OPTIONS = [1, 10, 100, "MAX"];
+
+// 숫자 정밀도 보호용 상한. MAX 제작/소비 수량 자체에는 제한을 두지 않습니다.
+const MAX_EFFECT_TIMESTAMP = Number.MAX_SAFE_INTEGER;
+const MAX_PENDING_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
+
+// 소비 마일스톤: 기존 m1/m5/m10/m20 ID 유지 → 수령 보상 중복 지급 방지.
+// 삭제된 m30 수령 기록은 기존 저장 객체에 남겨도 무해합니다.
+const CONSUMPTION_MILESTONES = [
+  { id: "m1", amount: 1000, reward: { type: "booster", amount: 1, label: "비료 부스터 +1" } },
+  { id: "m5", amount: 5000, reward: { type: "rice", amount: 1000, label: "쌀알 +1kg" } },
+  { id: "m10", amount: 10000, reward: { type: "booster", amount: 2, label: "비료 부스터 +2" } },
+  { id: "m20", amount: 20000, reward: { type: "milestoneAuto", amount: 0.1, label: "자동수확 영구 +10%" } },
+  { id: "m50", amount: 50000, reward: { type: "clickPermanent", amount: 0.1, label: "클릭 수확 영구 +10%" } },
+  { id: "m100", amount: 100000, reward: { type: "boosterDuration", amount: 10, label: "부스터 지속시간 영구 +10초" } },
+  { id: "m250", amount: 250000, reward: { type: "booster", amount: 5, label: "비료 부스터 +5" } },
+  { id: "m500", amount: 500000, reward: { type: "autoPermanent", amount: 0.1, label: "자동수확 영구 +10%" } },
+  { id: "m1000", amount: 1000000, reward: { type: "allPermanent", amount: 0.05, label: "전체 수확 영구 +5%" } },
+  { id: "m2500", amount: 2500000, reward: { type: "rice", amount: 100000, label: "쌀알 +100kg" } },
+  { id: "m5000", amount: 5000000, reward: { type: "booster", amount: 10, label: "비료 부스터 +10" } },
+  { id: "m10000", amount: 10000000, reward: { type: "clickPermanent", amount: 0.15, label: "클릭 수확 영구 +15%" } },
+  { id: "m25000", amount: 25000000, reward: { type: "autoPermanent", amount: 0.15, label: "자동수확 영구 +15%" } },
+  { id: "m50000", amount: 50000000, reward: { type: "boosterDuration", amount: 20, label: "부스터 지속시간 영구 +20초" } },
+  { id: "m100000", amount: 100000000, reward: { type: "allPermanent", amount: 0.1, label: "전체 수확 영구 +10%" } },
+  { id: "m250000", amount: 250000000, reward: { type: "booster", amount: 20, label: "비료 부스터 +20" } },
+  { id: "m500000", amount: 500000000, reward: { type: "clickPermanent", amount: 0.2, label: "클릭 수확 영구 +20%" } },
+  { id: "m1000000", amount: 1000000000, reward: { type: "autoPermanent", amount: 0.2, label: "자동수확 영구 +20%" } },
+  { id: "m2500000", amount: 2500000000, reward: { type: "allPermanent", amount: 0.15, label: "전체 수확 영구 +15%" } },
+  { id: "m5000000", amount: 5000000000, reward: { type: "unlockFlag", flag: "harvestCrown", label: "황금 수확 꾸미기 해금" } },
+];
+
+// 시연용 관리자 모드: 최종 제출 전 false로 변경하면 진입/지급 모두 비활성화.
+const ADMIN_MODE_ENABLED = true;
+const ADMIN_CONFIG = {
+  clickCount: 5,
+  clickWindowMs: 3000,
+  maxGrantRice: 1e12, // g: 직접 지급 1회 상한(게임 최고 LV 시연도 가능한 범위)
+  maxRiceBalance: Number.MAX_SAFE_INTEGER / 2,
+};
 
 // ----------------------------------------------------------------------------
 // 4. 비료 부스터
@@ -147,7 +180,7 @@ const DAILY_MISSIONS = [
   { id: "dailyClick", name: "부지런한 손", conditionText: "클릭 30회", type: "click", target: 30, reward: { type: "booster", amount: 1, label: "비료 부스터 +1" } },
   { id: "dailyUpgrade", name: "농기구 정비", conditionText: "업그레이드 1회", type: "upgrade", target: 1, reward: { type: "booster", amount: 1, label: "비료 부스터 +1" } },
   { id: "dailyRecipe", name: "오늘의 밥상", conditionText: "레시피 3회 사용", type: "recipe", target: 3, reward: { type: "booster", amount: 2, label: "비료 부스터 +2" } },
-  { id: "dailyBooster", name: "비료 뿌리기", conditionText: "부스터 1회 사용", type: "boosterUse", target: 1, reward: { type: "popularity", amount: 10, label: "인기도 +10" } },
+  { id: "dailyBooster", name: "비료 뿌리기", conditionText: "부스터 1회 사용", type: "boosterUse", target: 1, reward: { type: "booster", amount: 1, label: "비료 부스터 +1" } },
 ];
 
 // ----------------------------------------------------------------------------

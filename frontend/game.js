@@ -6,16 +6,9 @@ const API_BASE_URL = "http://127.0.0.1:8000";
 const OLLIE_HARVEST_IMAGE = "./assets/images/characters/ollie_harvest.png";
 
 // ----------------------------------------------------------------------------
-// 기존 소비량 마일스톤(통계 탭 전용) — 통계 탭을 그대로 유지하기 위해 변경하지 않음.
-// 새로운 "게임 LV" 시스템(GAME_LEVELS)과는 별개로 계속 동작합니다.
+// 소비량 보상 트랙(통계 화면 전용). 게임 LV 기준/보상과 별개로 유지합니다.
 // ----------------------------------------------------------------------------
-const milestones = [
-  { id: "m1", amount: 1000, rewardText: "인기도 +5", message: "쌀 소비의 첫걸음을 뗐어요.", reward: () => (state.popularity += 5) },
-  { id: "m5", amount: 5000, rewardText: "쌀알 +1,000", message: "이웃들이 올리의 밥상을 알게 됐어요.", reward: () => gainRice(1000) },
-  { id: "m10", amount: 10000, rewardText: "인기도 +10", message: "마을 장터에 올리의 쌀 음식이 등장했어요.", reward: () => (state.popularity += 10) },
-  { id: "m20", amount: 20000, rewardText: "자동 수확 +10%", message: "올리의 레시피가 입소문을 타기 시작했어요.", reward: () => (state.milestoneAutoBonus += 0.1) },
-  { id: "m30", amount: 30000, rewardText: "쌀 소비 여정 계속", message: "쌀 소비 여정이 계속 이어지고 있어요.", reward: () => {} },
-];
+const milestones = CONSUMPTION_MILESTONES;
 
 // ----------------------------------------------------------------------------
 // 초기 상태
@@ -24,7 +17,6 @@ const initialState = {
   rice: 0, // 보유 쌀알
   totalHarvested: 0, // 누적 수확량(참고용, 통계 표시)
   consumed: 0, // 누적 쌀 소비량 (totalConsumedRice) — 게임 LV 판정 기준
-  popularity: 0, // 인기도 — 내부 재화로만 유지 (레시피 해금 조건 등에 사용, 화면에 크게 노출하지 않음)
 
   level: 1, // 게임 전체 LV (1~12)
   claimedLevelRewards: {},
@@ -38,7 +30,10 @@ const initialState = {
 
   boosterCount: 0,
   boosterMultiplierBonus: 0, // 게임 LV.11 보상으로 누적되는 부스터 배율 보너스
-  boosterDurationBonusSeconds: 0, // 레시피(밥 짓기/쌀빵)로 누적되는 부스터 지속시간 보너스
+  boosterDurationBonusSeconds: 0, // 밥: 다음 부스터 1회에 적용 후 초기화
+  permanentBoosterDurationSeconds: 0, // 소비 마일스톤의 영구 시간 보너스
+  boosterMultiplierCharges: 0, // 쌀빵: +0.5배 강화 부스터 사용 가능 횟수
+  activeBoosterRecipeBonus: 0, // 현재 부스터의 레시피 가산 배율(중첩하지 않음)
   boosterEndTime: 0,
 
   recipeUses: Object.fromEntries(RECIPES.map((recipe) => [recipe.id, 0])),
@@ -115,8 +110,6 @@ const elements = {
   boosterCountValue: document.querySelector("#boosterCountValue"),
   useBoosterButton: document.querySelector("#useBoosterButton"),
   dailyPhraseText: document.querySelector("#dailyPhraseText"),
-  growthStageTitle: document.querySelector("#growthStageTitle"),
-  growthProgressBar: document.querySelector("#growthProgressBar"),
   growthProgressLabel: document.querySelector("#growthProgressLabel"),
   growthNextHint: document.querySelector("#growthNextHint"),
   boosterStatusPanel: document.querySelector("#boosterStatusPanel"),
@@ -180,6 +173,21 @@ function normalizeState(saved) {
       claimedDays: { ...initialState.attendance.claimedDays, ...(saved.attendance && saved.attendance.claimedDays) },
     },
   };
+
+  // 구버전 인기도는 해금 이력으로만 이관하고 폐기합니다. 새 성장 재화는 없습니다.
+  const legacyUnlocks = { meal: 0, kimbap: 10, tteok: 25, bread: 45, nurungji: 70 };
+  if (Object.prototype.hasOwnProperty.call(saved, "popularity")) {
+    for (const recipe of RECIPES) {
+      if ((saved.popularity || 0) >= legacyUnlocks[recipe.id] || merged.recipeUses[recipe.id] > 0) {
+        merged.unlockFlags[`recipe_${recipe.id}`] = true;
+      }
+    }
+  }
+  delete merged.popularity;
+  // 이미 활성화된 구버전 버프도 현재 고정 배율로 정규화하되 종료 시각은 보존합니다.
+  for (const recipe of RECIPES) {
+    if (recipe.buff) merged.buffs[`${recipe.buff.type}Multiplier`] = recipe.buff.multiplier;
+  }
 
   // 오늘의 미션: 저장된 날짜(로컬 기준)와 오늘이 다르면 진행도/수령 여부 리셋
   const today = getLocalDateKey();
@@ -248,6 +256,8 @@ async function syncFromServer() {
     if (serverState && (serverState.lastSavedAt || 0) > localTimestamp) {
       state = normalizeState(serverState);
       hasLocalSave = true;
+      checkGameLevelUp();
+      checkMilestones();
       render();
     }
   } catch {
@@ -502,7 +512,7 @@ function buyNextTier(kind) {
 // ----------------------------------------------------------------------------
 function getBoosterMultiplier(targetState = state) {
   if (Date.now() >= (targetState.boosterEndTime || 0)) return 1;
-  return BOOSTER_CONFIG.baseMultiplier * (1 + (targetState.boosterMultiplierBonus || 0));
+  return getBaseBoosterMultiplier(targetState) + (targetState.activeBoosterRecipeBonus || 0);
 }
 
 function getTapPower(targetState = state) {
@@ -529,8 +539,12 @@ function getPerSecond(targetState = state, options = {}) {
   return power;
 }
 
+function isRecipeUnlocked(recipe, targetState = state) {
+  return targetState.consumed >= recipe.unlockConsumed || Boolean(targetState.unlockFlags[`recipe_${recipe.id}`]);
+}
+
 function getUnlockedRecipeCount() {
-  return RECIPES.filter((recipe) => state.popularity >= recipe.unlockPopularity).length;
+  return RECIPES.filter((recipe) => isRecipeUnlocked(recipe)).length;
 }
 
 function gainRice(amount) {
@@ -631,13 +645,33 @@ function claimLevelReward(level) {
 // ----------------------------------------------------------------------------
 // 비료 부스터
 // ----------------------------------------------------------------------------
+function getBaseBoosterMultiplier(targetState = state) {
+  return BOOSTER_CONFIG.baseMultiplier * (1 + (targetState.boosterMultiplierBonus || 0));
+}
+
+function getNextBoosterRecipeBonus(targetState = state) {
+  return targetState.boosterMultiplierCharges > 0
+    ? RECIPES.find((recipe) => recipe.boosterMultiplierBonus)?.boosterMultiplierBonus || 0
+    : 0;
+}
+
+function getNextBoosterDuration(targetState = state) {
+  return BOOSTER_CONFIG.baseDurationSeconds + (targetState.permanentBoosterDurationSeconds || 0)
+    + (targetState.boosterDurationBonusSeconds || 0);
+}
+
 function useBooster() {
   if (state.boosterCount <= 0) return;
   state.boosterCount -= 1;
-  const duration = BOOSTER_CONFIG.baseDurationSeconds + (state.boosterDurationBonusSeconds || 0);
+  const duration = getNextBoosterDuration();
   const now = Date.now();
   const currentEnd = Math.max(state.boosterEndTime || 0, now);
-  state.boosterEndTime = currentEnd + duration * 1000; // 배율은 중첩하지 않고 남은 시간만 연장
+  const recipeBonus = getNextBoosterRecipeBonus();
+  const activeBonus = state.boosterEndTime > now ? state.activeBoosterRecipeBonus || 0 : 0;
+  state.activeBoosterRecipeBonus = Math.max(activeBonus, recipeBonus);
+  if (state.boosterMultiplierCharges > 0) state.boosterMultiplierCharges -= 1;
+  state.boosterDurationBonusSeconds = 0;
+  state.boosterEndTime = Math.min(MAX_EFFECT_TIMESTAMP, currentEnd + duration * 1000);
   showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("upgrade");
@@ -664,7 +698,7 @@ function setRecipeQty(qty) {
 }
 
 function useRecipe(recipe) {
-  if (state.popularity < recipe.unlockPopularity) return;
+  if (!isRecipeUnlocked(recipe)) return;
   const qty = getRecipeQty(recipe);
   if (qty <= 0) return;
 
@@ -673,23 +707,21 @@ function useRecipe(recipe) {
 
   const unlockedBefore = getUnlockedRecipeCount();
   state.consumed += totalCost;
-  state.popularity += recipe.popularity * qty;
   state.recipeUses[recipe.id] += qty;
 
-  if (recipe.buff?.type === "click") {
-    state.buffs.clickUntil = Date.now() + recipe.buff.duration * 1000;
-    state.buffs.clickMultiplier = recipe.buff.multiplier;
-  }
-  if (recipe.buff?.type === "auto") {
-    state.buffs.autoUntil = Date.now() + recipe.buff.duration * 1000;
-    state.buffs.autoMultiplier = recipe.buff.multiplier;
-  }
-  if (recipe.buff?.type === "all") {
-    state.buffs.allUntil = Date.now() + recipe.buff.duration * 1000;
-    state.buffs.allMultiplier = recipe.buff.multiplier;
+  if (recipe.buff) {
+    const { type, duration, multiplier } = recipe.buff;
+    const untilKey = `${type}Until`;
+    state.buffs[untilKey] = Math.min(MAX_EFFECT_TIMESTAMP,
+      Math.max(Date.now(), state.buffs[untilKey] || 0) + duration * qty * 1000);
+    state.buffs[`${type}Multiplier`] = multiplier;
   }
   if (recipe.boosterDurationBonusSeconds) {
-    state.boosterDurationBonusSeconds += recipe.boosterDurationBonusSeconds;
+    state.boosterDurationBonusSeconds = Math.min(MAX_PENDING_SECONDS,
+      state.boosterDurationBonusSeconds + recipe.boosterDurationBonusSeconds * qty);
+  }
+  if (recipe.boosterMultiplierBonus) {
+    state.boosterMultiplierCharges = Math.min(Number.MAX_SAFE_INTEGER, state.boosterMultiplierCharges + qty);
   }
 
   showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
@@ -772,7 +804,6 @@ function claimDailyMission(mission) {
 
   const reward = mission.reward;
   if (reward.type === "booster") state.boosterCount += reward.amount;
-  if (reward.type === "popularity") state.popularity += reward.amount;
 
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("upgrade");
@@ -785,9 +816,22 @@ function checkMilestones() {
   for (const milestone of milestones) {
     if (!state.claimedMilestones[milestone.id] && state.consumed >= milestone.amount) {
       state.claimedMilestones[milestone.id] = true;
-      milestone.reward();
-      showToast(milestone.message);
+      applyMilestoneReward(milestone.reward);
+      showToast(`${formatMilestoneWeight(milestone.amount)} 소비 달성! ${milestone.reward.label}`);
     }
+  }
+}
+
+function applyMilestoneReward(reward) {
+  switch (reward.type) {
+    case "booster": state.boosterCount += reward.amount; break;
+    case "rice": gainRice(reward.amount); break;
+    case "milestoneAuto": state.milestoneAutoBonus += reward.amount; break;
+    case "clickPermanent": state.permanentBonus.click += reward.amount; break;
+    case "autoPermanent": state.permanentBonus.auto += reward.amount; break;
+    case "allPermanent": state.permanentBonus.all += reward.amount; break;
+    case "boosterDuration": state.permanentBoosterDurationSeconds += reward.amount; break;
+    case "unlockFlag": state.unlockFlags[reward.flag] = true; break;
   }
 }
 
@@ -932,6 +976,7 @@ function renderStats() {
   const activeStage = [...BACKGROUND_STAGES].reverse().find((stage) => state.consumed >= stage.threshold) || BACKGROUND_STAGES[0];
   state.backgroundStage = activeStage.stage;
   elements.field.dataset.scene = activeStage.scene;
+  elements.harvestButton.classList.toggle("harvest-crown", Boolean(state.unlockFlags.harvestCrown));
 
   elements.soundIcon.src = state.soundEnabled
     ? "./assets/images/ui/ui_sound_on.png"
@@ -950,28 +995,44 @@ function renderStats() {
 
 function renderDailyPhrase() {
   if (!elements.dailyPhraseText) return;
-  elements.dailyPhraseText.textContent = getDailyPhrase();
+  const phrase = getDailyPhrase();
+  if (elements.dailyPhraseText.textContent !== phrase) {
+    elements.dailyPhraseText.textContent = phrase;
+    fitDailyPhrase();
+  }
+}
+
+function fitDailyPhrase() {
+  const text = elements.dailyPhraseText;
+  const area = text?.parentElement;
+  if (!area || !area.clientWidth || !area.clientHeight) return;
+  // 간판의 안전 영역 안에 전체 문장이 들어가도록 축소 (생략/잘라내기 없음).
+  let size = 16;
+  text.style.fontSize = `${size}px`;
+  while (size > 6 && (text.scrollWidth > area.clientWidth || text.scrollHeight > area.clientHeight)) {
+    size -= 0.5;
+    text.style.fontSize = `${size}px`;
+  }
+}
+
+function setupPhraseSign() {
+  const card = document.querySelector("#dailyPhraseCard");
+  if (!card) return;
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(fitDailyPhrase).observe(card);
+  window.addEventListener("resize", fitDailyPhrase);
+  if (document.fonts?.ready) document.fonts.ready.then(fitDailyPhrase);
+  requestAnimationFrame(fitDailyPhrase);
 }
 
 function renderGrowthCard() {
-  if (!elements.growthStageTitle) return;
-  const stageIndex = BACKGROUND_STAGES.findIndex((stage) => stage.stage === state.backgroundStage);
-  const currentStage = BACKGROUND_STAGES[stageIndex] || BACKGROUND_STAGES[0];
-  const nextStage = BACKGROUND_STAGES[stageIndex + 1];
-
-  elements.growthStageTitle.textContent = `${currentStage.stage}단계 벼 성장`;
-
-  if (nextStage) {
-    const span = nextStage.threshold - currentStage.threshold;
-    const progressed = Math.max(0, state.consumed - currentStage.threshold);
-    const percent = span > 0 ? Math.min((progressed / span) * 100, 100) : 100;
-    elements.growthProgressBar.style.width = `${percent}%`;
-    elements.growthProgressLabel.textContent = `${formatWeight(progressed)} / ${formatWeight(span)}`;
-    elements.growthNextHint.textContent = `다음 단계까지 필요한 쌀알: ${formatWeight(Math.max(0, nextStage.threshold - state.consumed))}`;
+  if (!elements.growthNextHint) return;
+  const nextLevel = getNextGameLevel(state.level);
+  if (nextLevel) {
+    elements.growthProgressLabel.textContent = `${formatWeight(state.consumed)} / ${formatWeight(nextLevel.requiredConsumed)}`;
+    elements.growthNextHint.textContent = `다음 LV.${nextLevel.level}까지 필요한 쌀 소비량: ${formatWeight(Math.max(0, nextLevel.requiredConsumed - state.consumed))}`;
   } else {
-    elements.growthProgressBar.style.width = "100%";
-    elements.growthProgressLabel.textContent = "최고 단계";
-    elements.growthNextHint.textContent = "벼가 완전히 익었어요!";
+    elements.growthProgressLabel.textContent = "최고 LV 달성";
+    elements.growthNextHint.textContent = `누적 쌀 소비량: ${formatWeight(state.consumed)}`;
   }
 }
 
@@ -1001,19 +1062,19 @@ function renderBoosterStatusPanel() {
     elements.boosterStatusLabel2.textContent = "효과";
     elements.boosterStatusValue2.textContent = `수확량 ${formatMultiplier(multiplier)}배 (x${formatMultiplier(multiplier)})`;
   } else if (state.boosterCount > 0) {
-    const previewMultiplier = BOOSTER_CONFIG.baseMultiplier * (1 + (state.boosterMultiplierBonus || 0));
-    const previewDuration = BOOSTER_CONFIG.baseDurationSeconds + (state.boosterDurationBonusSeconds || 0);
+    const previewMultiplier = getBaseBoosterMultiplier() + getNextBoosterRecipeBonus();
+    const previewDuration = getNextBoosterDuration();
     elements.boosterStatusHeadline.textContent = "비료 부스터 대기 중";
     elements.boosterStatusLabel1.textContent = "보유 개수";
     elements.boosterStatusValue1.textContent = `x${state.boosterCount}`;
     elements.boosterStatusLabel2.textContent = "효과 미리보기";
     elements.boosterStatusValue2.textContent = `수확량 ${formatMultiplier(previewMultiplier)}배 · ${previewDuration}초`;
   } else {
-    const previewMultiplier = BOOSTER_CONFIG.baseMultiplier * (1 + (state.boosterMultiplierBonus || 0));
-    const previewDuration = BOOSTER_CONFIG.baseDurationSeconds + (state.boosterDurationBonusSeconds || 0);
+    const previewMultiplier = getBaseBoosterMultiplier() + getNextBoosterRecipeBonus();
+    const previewDuration = getNextBoosterDuration();
     elements.boosterStatusHeadline.textContent = "비료 부스터가 없어요";
     elements.boosterStatusLabel1.textContent = "획득 방법";
-    elements.boosterStatusValue1.textContent = "게임 LV업 보상";
+    elements.boosterStatusValue1.textContent = "LV업 · 미션 · 소비 보상";
     elements.boosterStatusLabel2.textContent = "효과";
     elements.boosterStatusValue2.textContent = `수확량 ${formatMultiplier(previewMultiplier)}배 · ${previewDuration}초`;
   }
@@ -1106,6 +1167,19 @@ function renderToolCard(kind, label, tool, config, names, currentOutput) {
   elements.upgradeList.append(wrap);
 }
 
+function getRecipeEffectNote(recipe) {
+  if (recipe.buff) {
+    const label = { click: "클릭", auto: "자동", all: "전체" }[recipe.buff.type];
+    const remaining = (state.buffs[`${recipe.buff.type}Until`] - Date.now()) / 1000;
+    return `${recipe.buff.duration}초 × 수량 · ${label} 수확 ×${recipe.buff.multiplier}`
+      + (remaining > 0 ? ` · 남은 시간 ${formatDuration(remaining)}` : "");
+  }
+  if (recipe.boosterDurationBonusSeconds) {
+    return `다음 부스터 +${recipe.boosterDurationBonusSeconds}초 × 수량 · 적립 +${state.boosterDurationBonusSeconds}초`;
+  }
+  return `다음 부스터 +${recipe.boosterMultiplierBonus}배 · 수량만큼 횟수 적립 (${state.boosterMultiplierCharges}회 대기)`;
+}
+
 function renderRecipes() {
   if (!elements.recipeQtyButtons) return;
   elements.recipeQtyButtons.innerHTML = "";
@@ -1121,7 +1195,7 @@ function renderRecipes() {
   elements.recipeCount.textContent = `${getUnlockedRecipeCount()}/${RECIPES.length} 해금`;
   elements.recipeList.innerHTML = "";
   for (const recipe of RECIPES) {
-    const unlocked = state.popularity >= recipe.unlockPopularity;
+    const unlocked = isRecipeUnlocked(recipe);
     const qty = unlocked ? getRecipeQty(recipe) : 0;
     const totalCost = recipe.cost * qty;
     const button = document.createElement("button");
@@ -1132,7 +1206,7 @@ function renderRecipes() {
       <span class="card-icon"><img src="${recipe.icon}" alt="" /></span>
       <span>
         <span class="card-title">${recipe.name}${qty > 1 ? ` ×${qty}` : ""}</span>
-        <span class="card-meta">${unlocked ? recipe.note : `인기도 ${recipe.unlockPopularity} 필요`}</span>
+        <span class="card-meta">${unlocked ? getRecipeEffectNote(recipe) : `누적 소비 ${formatWeight(recipe.unlockConsumed)} 필요`}</span>
         <span class="card-note">사용 ${state.recipeUses[recipe.id]}회</span>
       </span>
       <span class="card-cost">${unlocked ? formatWeight(totalCost) : "잠김"}</span>
@@ -1171,6 +1245,8 @@ function renderMissions() {
   }
 }
 
+function formatMilestoneWeight(amount) {
+  return amount >= 1e6 ? `${amount / 1e6}t` : formatWeight(amount);
 function renderAttendance() {
   if (elements.attendanceList) {
     elements.attendanceList.innerHTML = "";
@@ -1204,25 +1280,75 @@ function renderAttendance() {
 }
 
 function renderMilestones() {
-  elements.milestoneList.innerHTML = "";
-  for (const milestone of milestones) {
-    const progress = Math.min((state.consumed / milestone.amount) * 100, 100);
-    const div = document.createElement("div");
-    div.className = `milestone${state.claimedMilestones[milestone.id] ? " done" : ""}`;
-    div.innerHTML = `
-      <strong>${formatWeight(milestone.amount)}</strong>
-      <span>${milestone.rewardText}</span>
-      <div class="progress-track"><span style="width: ${progress}%"></span></div>
-    `;
-    elements.milestoneList.append(div);
+  const list = elements.milestoneList;
+  // 게임 루프의 반복 렌더링 중 노드를 교체하지 않아 드래그/터치 스크롤을 보존합니다.
+  if (!list.children.length) {
+    for (const milestone of milestones) {
+      const card = document.createElement("article");
+      card.dataset.milestoneId = milestone.id;
+      list.append(card);
+    }
   }
+  const currentIndex = milestones.findIndex((milestone) => !state.claimedMilestones[milestone.id]);
+  milestones.forEach((milestone, index) => {
+    const card = list.children[index];
+    const done = Boolean(state.claimedMilestones[milestone.id]);
+    const current = index === currentIndex;
+    const progress = Math.max(0, Math.min(state.consumed / milestone.amount * 100, 100));
+    card.className = `milestone ${done ? "done" : current ? "current" : "locked"}`;
+    card.setAttribute("aria-current", current ? "step" : "false");
+    const markup = `
+      <span class="milestone-status">${done ? "✓ 완료" : current ? "진행 중" : "🔒 잠금"}</span>
+      <strong>${formatMilestoneWeight(milestone.amount)}</strong>
+      <span>${milestone.reward.label}</span>
+      ${current ? `<span>${formatMilestoneWeight(state.consumed)} / ${formatMilestoneWeight(milestone.amount)}</span>
+        <div class="progress-track" role="progressbar" aria-label="소비 진행도"
+          aria-valuenow="${Math.floor(progress)}" aria-valuemin="0" aria-valuemax="100">
+          <span style="width: ${progress}%"></span>
+        </div>` : ""}
+    `;
+    if (card.innerHTML !== markup) card.innerHTML = markup;
+  });
+}
+
+function centerCurrentMilestone() {
+  const list = elements.milestoneList;
+  if (!list.clientWidth) return;
+  const card = list.querySelector(".current") || list.lastElementChild;
+  if (!card) return;
+  const listRect = list.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  list.scrollLeft += cardRect.left - listRect.left - (list.clientWidth - cardRect.width) / 2;
+}
+
+function setupMilestoneDrag() {
+  const list = elements.milestoneList;
+  let drag = null;
+  list.addEventListener("pointerdown", (event) => {
+    // 모바일은 브라우저 기본 터치/관성 스크롤을 사용합니다.
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    drag = { pointerId: event.pointerId, x: event.clientX, scroll: list.scrollLeft };
+    list.setPointerCapture(event.pointerId);
+    list.classList.add("dragging");
+    event.preventDefault();
+  });
+  list.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    list.scrollLeft = drag.scroll - (event.clientX - drag.x);
+  });
+  const stop = () => {
+    drag = null;
+    list.classList.remove("dragging");
+  };
+  list.addEventListener("pointerup", stop);
+  list.addEventListener("pointercancel", stop);
+  list.addEventListener("lostpointercapture", stop);
 }
 
 function renderStatsSummary() {
   elements.statsSummary.innerHTML = `
     <div class="stats-item"><span>보유 쌀알</span><strong>${formatWeight(state.rice)}</strong></div>
     <div class="stats-item"><span>누적 쌀 소비량</span><strong>${formatWeight(state.consumed)}</strong></div>
-    <div class="stats-item"><span>인기도</span><strong>${Math.floor(state.popularity)}</strong></div>
     <div class="stats-item"><span>게임 LV</span><strong>Lv. ${state.level}<br />${getGameLevelInfo(state.level).title}</strong></div>
     <div class="stats-item"><span>비료 부스터</span><strong>${state.boosterCount}개 보유</strong></div>
   `;
@@ -1253,7 +1379,7 @@ function renderStorage() {
   if (elements.storageRecipeList) {
     elements.storageRecipeList.innerHTML = "";
     for (const recipe of RECIPES) {
-      const unlocked = state.popularity >= recipe.unlockPopularity;
+      const unlocked = isRecipeUnlocked(recipe);
       const card = document.createElement("div");
       card.className = `storage-recipe-card${unlocked ? "" : " locked"}`;
       card.innerHTML = unlocked
@@ -1265,7 +1391,7 @@ function renderStorage() {
         : `
             <div class="storage-recipe-icon">🔒</div>
             <div class="storage-recipe-name">${recipe.name}</div>
-            <div class="storage-recipe-meta">인기도 ${recipe.unlockPopularity} 필요</div>
+            <div class="storage-recipe-meta">누적 소비 ${formatWeight(recipe.unlockConsumed)} 필요</div>
           `;
       elements.storageRecipeList.append(card);
     }
@@ -1301,6 +1427,77 @@ function render() {
   renderStatsUpgrades();
   renderLevelDialog();
   renderStorage();
+}
+
+// ----------------------------------------------------------------------------
+// 시연 전용 관리자 모드 — ADMIN_MODE_ENABLED=false로 진입/지급 모두 차단
+// ----------------------------------------------------------------------------
+function addAdminRice(rawAmount, unit = "kg") {
+  if (!ADMIN_MODE_ENABLED) return false;
+  const text = String(rawAmount).trim();
+  const units = { g: 1, kg: 1000, t: 1000000 };
+  if (!/^[0-9]+$/.test(text) || !Object.prototype.hasOwnProperty.call(units, unit)) {
+    showToast("양의 정수를 입력해주세요. (숫자만 허용)");
+    return false;
+  }
+  const amount = Number(text) * units[unit];
+  const nextRice = state.rice + amount;
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > ADMIN_CONFIG.maxGrantRice
+      || !Number.isFinite(state.rice) || state.rice < 0 || !Number.isFinite(nextRice)
+      || nextRice > ADMIN_CONFIG.maxRiceBalance || nextRice <= state.rice) {
+    showToast(`지급은 1g~${formatWeight(ADMIN_CONFIG.maxGrantRice)} 범위이며 보유량 상한을 넘을 수 없어요.`);
+    return false;
+  }
+  // gainRice()는 누적/주간 수확량도 바꾸므로 관리자 지급에는 사용하지 않습니다.
+  state.rice = nextRice;
+  saveState(true);
+  elements.rice.textContent = formatWeight(state.rice);
+  renderUpgrades();
+  renderRecipes();
+  renderStatsSummary();
+  showToast(`쌀알 +${formatWeight(amount)} 지급 완료`);
+  return true;
+}
+
+function setupAdminMode() {
+  if (!ADMIN_MODE_ENABLED) return;
+  const trigger = document.querySelector("#adminModeTrigger");
+  const panel = document.querySelector("#adminPanel");
+  const input = document.querySelector("#adminRiceInput");
+  let clickCount = 0;
+  let firstClickAt = 0;
+  let resetTimer = 0;
+  const resetClicks = () => { clickCount = 0; firstClickAt = 0; };
+  const positionPanel = () => {
+    panel.style.top = `${document.querySelector(".play-area").offsetTop}px`;
+  };
+  trigger.addEventListener("click", () => {
+    const now = performance.now();
+    if (!clickCount || now - firstClickAt >= ADMIN_CONFIG.clickWindowMs) {
+      resetClicks();
+      firstClickAt = now;
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(resetClicks, ADMIN_CONFIG.clickWindowMs);
+    }
+    clickCount += 1;
+    if (clickCount < ADMIN_CONFIG.clickCount) return;
+    clearTimeout(resetTimer);
+    resetClicks();
+    positionPanel();
+    panel.hidden = false;
+    input.focus({ preventScroll: true });
+  });
+  panel.querySelectorAll("[data-admin-rice]").forEach((button) => {
+    button.addEventListener("click", () => addAdminRice(button.dataset.adminRice, "g"));
+  });
+  document.querySelector("#adminRiceForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (addAdminRice(input.value, document.querySelector("#adminRiceUnit").value)) input.value = "";
+  });
+  const close = () => { panel.hidden = true; trigger.focus({ preventScroll: true }); };
+  document.querySelector("#closeAdminButton").addEventListener("click", close);
+  panel.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+  window.addEventListener("resize", positionPanel);
 }
 
 // ----------------------------------------------------------------------------
@@ -1367,6 +1564,9 @@ function gameLoop(now) {
   requestAnimationFrame(gameLoop);
 }
 
+setupAdminMode();
+setupMilestoneDrag();
+setupPhraseSign();
 resizeCanvas();
 checkGameLevelUp();
 checkMilestones();

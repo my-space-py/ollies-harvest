@@ -163,6 +163,20 @@ button {
   filter: drop-shadow(0 8px 12px rgba(86, 55, 10, 0.2));
 }
 
+.logo-button {
+  display: grid;
+  place-items: center;
+  width: min(100%, 520px);
+  padding: 0;
+  background: transparent;
+  touch-action: manipulation;
+}
+
+.logo-button:focus-visible {
+  outline: 2px solid var(--leaf-dark);
+  outline-offset: 4px;
+}
+
 h1,
 h2,
 p {
@@ -252,16 +266,16 @@ h2 {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(109, 75, 18, 0.25);
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .stat-icon-circle img {
-  width: 16px;
-  height: 16px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
 }
 
@@ -293,16 +307,19 @@ h2 {
 
 .booster-box {
   display: grid;
-  place-items: center;
-  gap: 4px;
-  width: 92px;
+  grid-template-columns: 84px minmax(32px, auto);
+  grid-template-areas: "icon count" "label label";
+  align-content: center;
+  align-items: center;
+  justify-items: center;
+  gap: 4px 8px;
+  width: max-content;
   height: 100%;
-  min-height: 82px;
-  padding: 10px 6px;
-  border: 2px solid rgba(210, 155, 42, 0.55);
-  border-radius: 16px;
-  background: rgba(255, 246, 201, 0.94);
-  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.55);
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   text-align: center;
 }
 
@@ -312,21 +329,26 @@ h2 {
 }
 
 .booster-box-icon {
-  width: 30px;
-  height: 30px;
+  grid-area: icon;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
 }
 
 .booster-box-label {
+  grid-area: label;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
 }
 
 .booster-box-count {
+  grid-area: count;
+  justify-self: start;
   font-size: 18px;
   color: var(--brown);
+  white-space: nowrap;
 }
 
 .booster-status-caption {
@@ -700,20 +722,70 @@ h2 {
 }
 
 .milestones {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 12px 4px 18px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  cursor: grab;
+  user-select: none;
+  scrollbar-color: var(--leaf) var(--cream);
 }
 
 .milestone {
+  flex: 0 0 220px;
   display: grid;
-  gap: 4px;
-  padding: 10px;
+  align-content: start;
+  gap: 10px;
+  min-height: 170px;
+  padding: 16px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
+  scroll-snap-align: center;
 }
 
 .milestone.done {
   background: rgba(118, 188, 61, 0.25);
+  border-color: var(--leaf);
+}
+
+.milestone.current {
+  border: 2px solid var(--orange);
+  background: var(--cream);
+}
+
+.milestone.locked {
+  opacity: 0.58;
+}
+
+.milestone.done .milestone-status {
+  color: var(--leaf-dark);
+}
+
+.milestones.dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+}
+
+.milestone-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.harvest-crown::after {
+  content: "✦ 황금 수확 ✦";
+  position: absolute;
+  top: 12px;
+  padding: 6px 12px;
+  border: 1px solid #bb841c;
+  border-radius: 999px;
+  background: #fff0bd;
+  color: #81550b;
+  box-shadow: 0 0 20px #ffd86b;
+  font-weight: 900;
 }
 
 .progress-track {
@@ -851,23 +923,27 @@ h2 {
 }
 
 .phrase-card {
-  flex: 2 1 0;
-  min-width: 0;
-  display: grid;
-  place-items: center;
-  padding: 10px;
-  border: 2px solid rgba(210, 155, 42, 0.5);
-  border-radius: 14px;
-  background: rgba(255, 250, 226, 0.9);
+  position: relative;
+  flex: 2.6 1 0;
+  min-width: 180px;
+  aspect-ratio: 1183 / 1330;
+  align-self: center;
+  border: 0;
+  background: transparent;
   text-align: center;
 }
 
 .phrase-card p {
+  width: 100%;
   margin: 0;
-  color: var(--brown);
-  font-size: 13px;
+  color: #fff8df;
+  font-size: 16px;
   font-weight: 900;
-  line-height: 1.45;
+  line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  text-shadow: 0 1px 2px #70400d;
 }
 
 .growth-card {
@@ -932,31 +1008,34 @@ h2 {
 
 .fertilizer-button {
   flex: 1 1 0;
-  min-width: 84px;
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  border: 2px solid rgba(75, 159, 36, 0.5);
-  border-radius: 16px;
-  background: linear-gradient(180deg, #8fca4a, #4b9f24);
-  color: #fff;
-  font-weight: 1000;
-  font-size: 13px;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 900;
+  font-size: 15px;
   text-align: center;
 }
 
 .fertilizer-button img {
-  width: 30px;
-  height: 30px;
+  width: 84px;
+  height: 84px;
   object-fit: contain;
 }
 
 .fertilizer-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
-  background: #cfcfcf;
-  border-color: rgba(109, 75, 18, 0.25);
+  opacity: 0.45;
+  background: transparent;
+  border: 0;
   color: var(--muted);
 }
 
@@ -1286,7 +1365,7 @@ h2 {
   display: none;
 }
 
-/* 창고/이벤트/공지/오늘의 미션/출석 바로가기 버튼 */
+/* 올리의 기록/이벤트/공지/오늘의 미션 바로가기 버튼 */
 .quick-menu {
   display: flex;
   flex-wrap: wrap; /* 5번째 버튼(출석) 추가로 좁은 화면에서 한 줄에 다 안 들어가면 다음 줄로 */
@@ -1378,9 +1457,9 @@ h2 {
   }
 }
 
-/* 바로가기 팝업(창고/이벤트/공지/오늘의 미션):
+/* 바로가기 팝업(올리의 기록/이벤트/공지/오늘의 미션):
    실제 크기는 index.html의 sizeQuickDialog()가 열릴 때마다 계산해서 인라인으로 지정함
-   (세로: '창고' 버튼~'모내기' 카드 실측, 가로: '모내기'~'작은 쌀 축제' 카드 실측).
+   (세로: '올리의 기록' 버튼~'모내기' 카드 실측, 가로: '모내기'~'작은 쌀 축제' 카드 실측).
    아래 값은 측정 실패 시(예: 스테이지 미렌더링)의 폴백 기본값. */
 .quick-dialog {
   width: min(90vw, 820px);
@@ -1421,7 +1500,7 @@ h2 {
 }
 
 /* ---------------------------------------------------------------------- */
-/* 창고 팝업: 레시피 도감 + 성장 보상 기록                                  */
+/* 올리의 기록 팝업: 레시피 도감 + 성장 보상 기록                                  */
 /* ---------------------------------------------------------------------- */
 .storage-dialog {
   height: auto;
@@ -1561,7 +1640,7 @@ h2 {
 }
 
 body {
-  padding-bottom: 64px; /* 하단 고정 네비게이션에 콘텐츠가 가려지지 않도록 여백 확보 */
+  padding-bottom: calc(76.8px + env(safe-area-inset-bottom, 0px)); /* 하단 고정 네비게이션에 콘텐츠가 가려지지 않도록 여백 확보 */
 }
 
 .bottom-nav {
@@ -1574,8 +1653,8 @@ body {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: center;
   width: 100%;
-  height: 64px;
-  padding: 8px 10px;
+  height: calc(76.8px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px));
   gap: 6px;
   background: var(--cream);
   border-top: 1px solid var(--line);
@@ -1588,14 +1667,14 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 2.4px;
   height: 100%;
-  padding: 4px 2px;
-  border: 2px solid transparent;
-  border-radius: 14px;
+  padding: 4.8px 2px;
+  border: 2.4px solid transparent;
+  border-radius: 16.8px;
   background: transparent;
   color: var(--muted);
-  font-size: 15px; /* 창고/이벤트/공지/오늘의 미션 버튼 글씨 크기와 동일 */
+  font-size: 15px; /* 올리의 기록/이벤트/공지/오늘의 미션 버튼 글씨 크기와 동일 */
   font-weight: 800;
   transition:
     background 160ms ease,
@@ -1605,13 +1684,14 @@ body {
 }
 
 .nav-btn-icon {
-  width: 22px;
-  height: 22px;
+  width: 26.4px;
+  height: 26.4px;
+  flex-shrink: 0;
   object-fit: contain;
 }
 
 .nav-btn-label {
-  font-size: 11px;
+  font-size: 13.2px;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -1626,7 +1706,7 @@ body {
   transform: translate(-50%, -50%);
   color: var(--muted);
   opacity: 0.7; /* 투명도 70% */
-  font-size: 28px;
+  font-size: 33.6px;
   font-weight: 400; /* 기존 700의 0.6배 (표준 굵기 단계로 반올림) */
   pointer-events: none;
 }
@@ -1650,7 +1730,7 @@ body {
 }
 
 .app-screen {
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 76.8px - env(safe-area-inset-bottom, 0px));
   padding: 18px;
   background: #f8e6b7;
 }
@@ -1778,4 +1858,369 @@ body {
 
 .my-friend-code strong {
   letter-spacing: 1px;
+}
+
+/* 시연 전용 관리자 패널: 문서 흐름 밖에 배치하여 기존 화면 크기를 유지 */
+.admin-panel {
+  position: absolute;
+  z-index: 10;
+  right: 24px;
+  width: 240px;
+  max-width: calc(100vw - 28px);
+  padding: 16px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--cream);
+  box-shadow: 0 10px 28px rgba(109, 75, 18, 0.22);
+}
+
+.admin-panel[hidden] {
+  display: none;
+}
+
+.admin-panel h2 {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.admin-panel button {
+  min-height: 38px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--card-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-quick-buttons,
+.admin-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.admin-quick-buttons button {
+  flex: 1;
+}
+
+.admin-panel label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.admin-input-row input,
+.admin-input-row select {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  font: inherit;
+}
+
+.admin-input-row input {
+  width: 100%;
+}
+
+.admin-panel form > button,
+#closeAdminButton {
+  width: 100%;
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .logo-button {
+    justify-self: start;
+    width: min(92vw, 430px);
+  }
+
+  .admin-panel {
+    position: fixed;
+    top: 100px !important;
+    right: 14px;
+    max-height: calc(100dvh - 180px);
+    overflow-y: auto;
+  }
+}
+
+
+.booster-status-icon img {
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.bottom-nav .nav-btn-icon {
+  transform: scale(1.35);
+  transform-origin: center bottom;
+}
+
+@media (max-width: 460px) {
+  .bottom-nav .nav-btn-label {
+    font-size: clamp(9px, 2.8vw, 13.2px);
+  }
+}
+
+/* 좁은 화면에서는 확대된 지표와 비료가 겹치지 않도록 줄바꿈 */
+@media (max-width: 700px) {
+  .hero-stats {
+    flex-wrap: wrap;
+  }
+  .hero-stats .stat-pill {
+    flex: 1 1 100%;
+  }
+  .hero-stats .booster-widget {
+    margin-left: auto;
+  }
+  .hero-stats .stat-cell {
+    padding: 0 4px;
+  }
+  .hero-stats .stat-cell-head {
+    gap: 4px;
+  }
+  .hero-stats .stat-cell-label {
+    white-space: normal;
+    word-break: keep-all;
+  }
+}
+
+/* 하단 LV·표지판·비료 UI: 게임 데이터 및 배경 성장 로직은 그대로 유지 */
+.home-footer-panel {
+  align-items: center;
+}
+
+.phrase-sign {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.phrase-sign-copy {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 24%;
+  bottom: 34%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.growth-card {
+  align-self: center;
+}
+
+.growth-card-title {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+.growth-card-title:focus-visible,
+.fertilizer-button:focus-visible {
+  outline: 2px solid var(--leaf-dark);
+  outline-offset: 3px;
+}
+
+.booster-box-label {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hero-stats .booster-box-count {
+  font-size: 24px;
+  font-weight: 1000;
+  color: var(--text);
+}
+
+.bottom-nav .nav-btn {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+@media (max-width: 760px) {
+  .profile-spacer {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .home-footer-panel {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .phrase-card {
+    flex: 0 1 220px;
+  }
+  .growth-card {
+    flex: 1 1 220px;
+  }
+  .fertilizer-button {
+    flex: 0 0 104px;
+  }
+}
+
+@media (max-width: 460px) {
+  .booster-box-label {
+    font-size: 12px;
+  }
+}
+
+/* 좌우 트랙을 동일하게 유지해 LV 카드의 중심을 항상 화면 중앙에 고정 */
+.home-footer-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  gap: 12px;
+}
+
+.home-footer-panel .phrase-card {
+  grid-column: 1;
+  grid-row: 1;
+  width: min(100%, 132px);
+  min-width: 0;
+}
+
+.home-footer-panel .growth-card {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+}
+
+.home-footer-panel .fertilizer-button {
+  grid-column: 3;
+  grid-row: 1;
+  width: min(100%, 132px);
+  min-width: 0;
+  min-height: 148px;
+  padding: 12px 8px;
+  border: 2px solid #54812b;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff9de, #e5efbd);
+  box-shadow: 0 4px 0 #507b2c, 0 7px 12px rgba(69, 91, 27, 0.16);
+  color: var(--leaf-dark);
+  font-weight: 900;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  touch-action: manipulation;
+}
+
+.home-footer-panel .fertilizer-button img {
+  width: 76px;
+  max-width: 100%;
+  height: 76px;
+  object-fit: contain;
+}
+
+.home-footer-panel .fertilizer-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fffde9, #d8ec9e);
+  transform: translateY(-2px);
+}
+
+.home-footer-panel .fertilizer-button:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #507b2c;
+}
+
+.home-footer-panel .fertilizer-button:disabled {
+  opacity: 0.65;
+  border-color: #929581;
+  background: #eeeedf;
+  color: #747962;
+  box-shadow: 0 3px 0 #a0a38d;
+  cursor: not-allowed;
+}
+
+/* 작은 화면에서도 LV 중심을 유지하고, 멘트의 가독성을 확보 */
+@media (max-width: 600px) {
+  .home-footer-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-footer-panel .growth-card {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .home-footer-panel .phrase-card {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .home-footer-panel .fertilizer-button {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+}
+
+/* 하단 좌우 트랙과 LV 중앙 정렬은 유지하고 멘트 표지판만 132 → 198px */
+.home-footer-panel .phrase-card {
+  width: min(100%, 198px);
+}
+
+/* 상태(아이콘 포함) : 보유 개수 : 효과 = 3 : 2 : 3 */
+.booster-status-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) 1px minmax(0, 2fr) 1px minmax(0, 3fr);
+  column-gap: clamp(6px, 1.4vw, 12px);
+}
+
+.booster-status-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.booster-status-headline {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.booster-status-panel .booster-status-cell {
+  justify-content: center;
+  text-align: center;
+}
+
+.booster-status-cell-inline {
+  flex-wrap: wrap;
+}
+
+.booster-status-panel .booster-status-label,
+.booster-status-panel .booster-status-value {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .booster-status-panel {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .booster-status-headline,
+  #boosterStatusLabel1 {
+    font-size: 12px;
+  }
+  .booster-status-value {
+    font-size: 13px;
+  }
+}
+
+/* 상태 패널 바깥 좌우 여백을 동일하게 적용 */
+.booster-status-panel {
+  padding-inline: clamp(10px, 2vw, 18px);
 }
