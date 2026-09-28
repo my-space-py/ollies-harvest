@@ -1,4 +1,8 @@
-const API_BASE_URL = "http://127.0.0.1:8000";
+// 로컬 개발(정적 서버 4174 + 백엔드 8000을 따로 실행)에서는 절대 주소가 필요하고,
+// 배포 환경(Nginx가 프론트/백엔드를 같은 오리진으로 리버스 프록시)에서는 상대 경로면 충분합니다.
+// 자세한 배포 구성은 GCP.md 참고.
+const API_BASE_URL =
+  typeof location !== "undefined" && location.port === "4174" ? "http://127.0.0.1:8000" : "";
 
 const loginForm = document.getElementById("loginForm");
 const signupForm = document.getElementById("signupForm");
