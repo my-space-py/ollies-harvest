@@ -9,7 +9,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=35" />
+    <link rel="stylesheet" href="./styles.css?v=36" />
   </head>
   <body>
     <main class="app" id="homeScreen">
@@ -337,65 +337,73 @@
 
     <!-- 게임 LV 1~12 전체 마일스톤 팝업: 홈 화면 상단 LV 라벨 클릭 시 열림 -->
     <dialog id="levelDialog" class="level-dialog">
-      <button id="closeLevelDialogButton" type="button" class="dialog-close-btn" aria-label="닫기">×</button>
+      <button type="button" class="modal-close-btn" data-close="levelDialog" aria-label="닫기">×</button>
       <h2>게임 LV</h2>
-      <div id="levelDialogList" class="card-list"></div>
+      <div class="modal-scroll-body">
+        <div id="levelDialogList" class="card-list"></div>
+      </div>
     </dialog>
 
     <dialog id="festivalDialog" class="festival-dialog">
+      <button type="button" class="modal-close-btn" data-close="festivalDialog" aria-label="닫기">×</button>
       <img class="festival-badge" src="./assets/images/badges/festival_badge.png" alt="게임 LV.12 달성 배지" />
       <h2>LV.12 신농 달성!</h2>
       <p>
         작은 논에서 시작된 올리의 수확이 신농의 경지에 이르렀어요.
         전체 수확량이 영구히 +10% 증가했습니다.
       </p>
-      <button id="closeFestivalButton" type="button">계속 수확하기</button>
+      <button type="button" data-close="festivalDialog">계속 수확하기</button>
     </dialog>
 
-    <!-- 바로가기 팝업 4종: 아직 내용 없음, 크기만 지정된 상태 -->
+    <!-- 바로가기 팝업 5종: 우측 상단 X로 언제든 닫을 수 있음(스크롤 불필요) -->
     <dialog id="storageDialog" class="quick-dialog storage-dialog">
+      <button type="button" class="modal-close-btn" data-close="storageDialog" aria-label="닫기">×</button>
       <h2>올리의 기록</h2>
       <p class="dialog-subtitle">레시피 도감 · 성장 기록</p>
 
-      <div class="storage-section-title">레시피 도감</div>
-      <div id="storageRecipeList" class="storage-recipe-grid"></div>
+      <div class="modal-scroll-body">
+        <div class="storage-section-title">레시피 도감</div>
+        <div id="storageRecipeList" class="storage-recipe-grid"></div>
 
-      <div class="storage-section-title">성장 보상 기록</div>
-      <div id="storageLevelList" class="storage-level-list"></div>
-
-      <button type="button" class="quick-dialog-close" data-close="storageDialog">닫기</button>
+        <div class="storage-section-title">성장 보상 기록</div>
+        <div id="storageLevelList" class="storage-level-list"></div>
+      </div>
     </dialog>
 
     <dialog id="eventDialog" class="quick-dialog">
+      <button type="button" class="modal-close-btn" data-close="eventDialog" aria-label="닫기">×</button>
       <h2>이벤트</h2>
       <p class="quick-dialog-body">준비 중입니다.</p>
-      <button type="button" class="quick-dialog-close" data-close="eventDialog">닫기</button>
     </dialog>
 
     <dialog id="noticeDialog" class="quick-dialog">
+      <button type="button" class="modal-close-btn" data-close="noticeDialog" aria-label="닫기">×</button>
       <h2>공지</h2>
       <p class="quick-dialog-body">준비 중입니다.</p>
-      <button type="button" class="quick-dialog-close" data-close="noticeDialog">닫기</button>
     </dialog>
 
     <dialog id="dailyDialog" class="quick-dialog">
+      <button type="button" class="modal-close-btn" data-close="dailyDialog" aria-label="닫기">×</button>
       <h2>오늘의 미션</h2>
       <p class="dialog-subtitle">매일 자정(로컬 기준) 초기화</p>
-      <div id="missionDialogList" class="card-list"></div>
-      <button type="button" class="quick-dialog-close" data-close="dailyDialog">닫기</button>
+      <div class="modal-scroll-body">
+        <div id="missionDialogList" class="card-list"></div>
+      </div>
     </dialog>
 
     <dialog id="attendanceDialog" class="quick-dialog">
+      <button type="button" class="modal-close-btn" data-close="attendanceDialog" aria-label="닫기">×</button>
       <h2>출석 보상</h2>
       <p class="dialog-subtitle">접속한 날마다 하루씩 채워져요 · 최대 7일, 반복 없음</p>
-      <div id="attendanceList" class="card-list"></div>
-      <button type="button" class="quick-dialog-close" data-close="attendanceDialog">닫기</button>
+      <div class="modal-scroll-body">
+        <div id="attendanceList" class="card-list"></div>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./js/balance-config.js?v=4"></script>
-    <script src="./game.js?v=20"></script>
+    <script src="./js/balance-config.js?v=5"></script>
+    <script src="./game.js?v=21"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -474,7 +482,8 @@
           dialog.showModal();
         });
       });
-      document.querySelectorAll(".quick-dialog-close").forEach((btn) => {
+      // data-close="다이얼로그ID"가 있는 모든 버튼(우측 상단 X 포함, 모든 다이얼로그 공통)
+      document.querySelectorAll("[data-close]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const dialog = document.getElementById(btn.dataset.close);
           if (dialog) dialog.close();

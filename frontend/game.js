@@ -122,7 +122,6 @@ const elements = {
   storageLevelList: document.querySelector("#storageLevelList"),
   levelDialog: document.querySelector("#levelDialog"),
   levelDialogList: document.querySelector("#levelDialogList"),
-  closeLevelDialogButton: document.querySelector("#closeLevelDialogButton"),
   harvestButton: document.querySelector("#harvestButton"),
   ollieImage: document.querySelector("#ollieImage"),
   floatLayer: document.querySelector("#floatLayer"),
@@ -133,7 +132,6 @@ const elements = {
   toast: document.querySelector("#toast"),
   canvas: document.querySelector("#fieldCanvas"),
   festivalDialog: document.querySelector("#festivalDialog"),
-  closeFestivalButton: document.querySelector("#closeFestivalButton"),
 };
 
 const field = {
@@ -779,12 +777,9 @@ function claimAttendanceReward(day) {
     case "booster":
       state.boosterCount += reward.amount;
       break;
-    case "popularity":
-      state.popularity += reward.amount;
-      break;
-    case "boosterPopularity":
+    case "boosterRice":
       state.boosterCount += reward.amount;
-      state.popularity += reward.popularityAmount || 0;
+      gainRice(reward.riceAmount || 0);
       break;
     default:
       break;
@@ -1247,6 +1242,8 @@ function renderMissions() {
 
 function formatMilestoneWeight(amount) {
   return amount >= 1e6 ? `${amount / 1e6}t` : formatWeight(amount);
+}
+
 function renderAttendance() {
   if (elements.attendanceList) {
     elements.attendanceList.innerHTML = "";
@@ -1537,10 +1534,7 @@ if (elements.levelLabel) {
     if (elements.levelDialog.showModal) elements.levelDialog.showModal();
   });
 }
-if (elements.closeLevelDialogButton) {
-  elements.closeLevelDialogButton.addEventListener("click", () => elements.levelDialog.close());
-}
-elements.closeFestivalButton.addEventListener("click", () => elements.festivalDialog.close());
+// 다이얼로그 닫기(우측 상단 X, 축제 CTA 버튼 포함)는 index.html의 [data-close] 공통 핸들러가 처리합니다.
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("beforeunload", () => saveState(true));
 

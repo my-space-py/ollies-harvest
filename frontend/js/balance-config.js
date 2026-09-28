@@ -205,15 +205,16 @@ function getLocalDateKey(date = new Date()) {
 // 로컬 날짜가 바뀔 때마다(연속 접속 여부와 무관) 하루씩 카운트가 올라가고,
 // 그날 칸을 눌러 보상을 받는다. 7일차를 받으면 출석판은 완료 상태로 끝나고
 // 반복(리셋)되지 않는다. 초반에는 쌀알로 즉시 체감되는 보상을, 후반에는
-// 비료 부스터/인기도 위주로 지급해 이미 자리 잡은 다른 보상 체계와 균형을 맞춘다.
+// 비료 부스터 위주로 지급해 이미 자리 잡은 다른 보상 체계와 균형을 맞춘다.
+// (인기도 시스템은 폐지되어 이 보상 목록에는 등장하지 않는다.)
 const ATTENDANCE_REWARDS = [
   { day: 1, type: "rice", amount: 30, label: "쌀알 +30g" },
   { day: 2, type: "rice", amount: 80, label: "쌀알 +80g" },
   { day: 3, type: "booster", amount: 1, label: "비료 부스터 +1" },
-  { day: 4, type: "popularity", amount: 8, label: "인기도 +8" },
+  { day: 4, type: "rice", amount: 120, label: "쌀알 +120g" },
   { day: 5, type: "rice", amount: 200, label: "쌀알 +200g" },
   { day: 6, type: "booster", amount: 2, label: "비료 부스터 +2" },
-  { day: 7, type: "boosterPopularity", amount: 3, popularityAmount: 15, label: "비료 부스터 +3, 인기도 +15", isFinal: true },
+  { day: 7, type: "boosterRice", amount: 3, riceAmount: 500, label: "비료 부스터 +3, 쌀알 +500g", isFinal: true },
 ];
 
 // ----------------------------------------------------------------------------

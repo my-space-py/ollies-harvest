@@ -184,6 +184,26 @@ test('20 milestone goals, bulk claims and repeat checks are idempotent', () => {
     const before = JSON.stringify(state); checkMilestones(); assert.equal(JSON.stringify(state), before);`);
 });
 
+test('attendance rewards pay out rice/boosters for days 1-7 with no popularity field, and stop advancing after day 7', () => {
+  const g = createGame();
+  g.run(`
+    state = cloneInitialState();
+    checkAttendanceProgress('2026-01-01'); assert.equal(state.attendance.count, 1);
+    checkAttendanceProgress('2026-01-01'); assert.equal(state.attendance.count, 1); // 같은 날 중복 인정 방지
+    claimAttendanceReward(1); assert.equal(state.rice, 30);
+    checkAttendanceProgress('2026-01-02'); claimAttendanceReward(2); assert.equal(state.rice, 110);
+    checkAttendanceProgress('2026-01-03'); claimAttendanceReward(3); assert.equal(state.boosterCount, 1);
+    checkAttendanceProgress('2026-01-04'); claimAttendanceReward(4); assert.equal(state.rice, 230);
+    checkAttendanceProgress('2026-01-05'); claimAttendanceReward(5); assert.equal(state.rice, 430);
+    checkAttendanceProgress('2026-01-06'); claimAttendanceReward(6); assert.equal(state.boosterCount, 3);
+    checkAttendanceProgress('2026-01-07'); claimAttendanceReward(7);
+    assert.equal(state.boosterCount, 6); assert.equal(state.rice, 930);
+    assert.ok(!('popularity' in state)); // 인기도 시스템 폐지: 출석 보상이 되살리지 않아야 함
+    checkAttendanceProgress('2026-01-08'); assert.equal(state.attendance.count, 7); // 7일 완료 후 더 증가하지 않음
+    claimAttendanceReward(7); assert.equal(state.rice, 930); // 중복 수령 방지
+  `);
+});
+
 test('old saves retain unlocked recipes, rewards and accumulated booster time', () => {
   createGame().run(`const legacy = cloneInitialState();
     legacy.popularity = 70; legacy.consumed = 20000; legacy.rice = 42;

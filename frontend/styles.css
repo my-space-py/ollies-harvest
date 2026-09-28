@@ -204,7 +204,7 @@ h2 {
 }
 
 .toolbar button,
-.festival-dialog button {
+.festival-dialog button:not(.modal-close-btn) {
   min-height: 38px;
   padding: 0 14px;
   border-radius: 8px;
@@ -1119,40 +1119,60 @@ h2 {
 /* ---------------------------------------------------------------------- */
 .level-dialog {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(90vw, 460px);
+  height: min(78vh, 640px);
   max-width: 460px;
   max-height: 78vh;
   padding: 20px;
   border: 0;
   border-radius: 14px;
-  overflow-y: auto;
 }
 
 .level-dialog h2 {
+  flex-shrink: 0;
   margin: 0 0 10px;
   text-align: center;
 }
 
-.dialog-close-btn {
+/* ---------------------------------------------------------------------- */
+/* 모달 공통: 우측 상단 빨간 X 닫기 버튼 + 스크롤 가능한 본문 영역             */
+/* 스크롤은 이 안쪽 wrapper만 담당해서, 내용이 길어도 X 버튼은 항상 같은     */
+/* 자리에 고정되어 스크롤을 내리지 않고도 바로 닫을 수 있다.                  */
+/* ---------------------------------------------------------------------- */
+.modal-close-btn {
   position: absolute;
   top: 10px;
   right: 10px;
+  z-index: 2;
   width: 32px;
   height: 32px;
   display: grid;
   place-items: center;
+  border: 1px solid rgba(217, 38, 38, 0.35);
   border-radius: 999px;
-  background: rgba(109, 75, 18, 0.12);
-  color: var(--brown);
+  background: rgba(217, 38, 38, 0.12);
+  color: #d92626;
   font-size: 20px;
   line-height: 1;
   font-weight: 900;
 }
 
-.dialog-close-btn:hover {
-  background: rgba(109, 75, 18, 0.22);
+.modal-close-btn:hover {
+  background: #d92626;
+  border-color: #d92626;
+  color: #fff;
+}
+
+.modal-scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .dialog-subtitle {
+  flex-shrink: 0;
   margin: -6px 0 10px;
   text-align: right;
   color: var(--muted);
@@ -1161,6 +1181,7 @@ h2 {
 }
 
 .festival-dialog {
+  position: relative;
   max-width: 420px;
   padding: 22px;
   border: 0;
@@ -1188,7 +1209,7 @@ h2 {
   line-height: 1.55;
 }
 
-.festival-dialog button {
+.festival-dialog button:not(.modal-close-btn) {
   width: 100%;
   background: linear-gradient(180deg, #ffd86b, #f2a51a);
 }
@@ -1462,6 +1483,9 @@ h2 {
    (세로: '올리의 기록' 버튼~'모내기' 카드 실측, 가로: '모내기'~'작은 쌀 축제' 카드 실측).
    아래 값은 측정 실패 시(예: 스테이지 미렌더링)의 폴백 기본값. */
 .quick-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(90vw, 820px);
   height: min(80vh, 600px);
   padding: 24px;
@@ -1469,7 +1493,6 @@ h2 {
   border-radius: 12px;
   background: var(--cream);
   color: var(--text);
-  overflow-y: auto;
 }
 
 .quick-dialog::backdrop {
@@ -1477,26 +1500,19 @@ h2 {
 }
 
 .quick-dialog h2 {
+  flex-shrink: 0;
   margin-bottom: 12px;
 }
 
 .quick-dialog-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: calc(100% - 90px);
+  overflow-y: auto;
   color: var(--muted);
   font-weight: 700;
-}
-
-.quick-dialog-close {
-  width: 100%;
-  min-height: 42px;
-  margin-top: 18px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffd86b, #f2a51a);
-  color: var(--text);
-  font-weight: 1000;
 }
 
 /* ---------------------------------------------------------------------- */
