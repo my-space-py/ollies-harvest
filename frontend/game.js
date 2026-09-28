@@ -48,6 +48,13 @@ const initialState = {
   weekKey: getISOWeekKey(),
   weeklyHarvest: 0,
 
+  // 출석 보상 (최대 7일, 반복 없음)
+  attendance: {
+    count: 0, // 인정된 출석일 수 (0~7)
+    lastDateKey: "", // 마지막으로 출석이 인정된 로컬 날짜
+    claimedDays: {}, // { "1": true, ... } 이미 받은 날짜별 보상
+  },
+
   backgroundStage: 1,
 
   soundEnabled: true,
@@ -88,6 +95,7 @@ const elements = {
   recipeQtyButtons: document.querySelector("#recipeQtyButtons"),
   missionList: document.querySelector("#missionList"),
   missionDialogList: document.querySelector("#missionDialogList"),
+  attendanceList: document.querySelector("#attendanceList"),
   milestoneList: document.querySelector("#milestoneList"),
   statsSummary: document.querySelector("#statsSummary"),
   statsUpgradeList: document.querySelector("#statsUpgradeList"),
@@ -159,6 +167,11 @@ function normalizeState(saved) {
     dailyProgress: { ...initialState.dailyProgress, ...saved.dailyProgress },
     dailyClaimed: { ...initialState.dailyClaimed, ...saved.dailyClaimed },
     buffs: { ...initialState.buffs, ...saved.buffs },
+    attendance: {
+      ...initialState.attendance,
+      ...saved.attendance,
+      claimedDays: { ...initialState.attendance.claimedDays, ...(saved.attendance && saved.attendance.claimedDays) },
+    },
   };
 
   // 구버전 인기도는 해금 이력으로만 이관하고 폐기합니다. 새 성장 재화는 없습니다.
@@ -738,6 +751,50 @@ function checkDailyAndWeeklyReset() {
     state.weekKey = thisWeek;
     state.weeklyHarvest = 0;
   }
+  checkAttendanceProgress(today);
+}
+
+// ----------------------------------------------------------------------------
+// 출석 보상 (최대 7일, 반복 없음)
+// ----------------------------------------------------------------------------
+function checkAttendanceProgress(today = getLocalDateKey()) {
+  if (state.attendance.count >= ATTENDANCE_REWARDS.length) return; // 7일 출석판은 완료 후 반복되지 않음
+  if (state.attendance.lastDateKey === today) return; // 같은 날 중복 인정 방지 (연속 접속을 요구하지는 않음)
+  state.attendance.lastDateKey = today;
+  state.attendance.count += 1;
+  showToast(`오늘 접속 확인! 출석 ${state.attendance.count}/${ATTENDANCE_REWARDS.length}일차`);
+}
+
+function claimAttendanceReward(day) {
+  const reward = ATTENDANCE_REWARDS.find((entry) => entry.day === day);
+  if (!reward) return;
+  if (state.attendance.claimedDays[day]) return;
+  if (state.attendance.count < day) return;
+  state.attendance.claimedDays[day] = true;
+
+  switch (reward.type) {
+    case "rice":
+      gainRice(reward.amount);
+      break;
+    case "booster":
+      state.boosterCount += reward.amount;
+      break;
+    case "popularity":
+      state.popularity += reward.amount;
+      break;
+    case "boosterPopularity":
+      state.boosterCount += reward.amount;
+      state.popularity += reward.popularityAmount || 0;
+      break;
+    default:
+      break;
+  }
+
+  showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
+  playGameSound(reward.isFinal ? "festival" : "upgrade");
+  showToast(`${day}일차 출석 보상: ${reward.label}`);
+  render();
+  saveState(true);
 }
 
 function claimDailyMission(mission) {
@@ -1190,6 +1247,36 @@ function renderMissions() {
 
 function formatMilestoneWeight(amount) {
   return amount >= 1e6 ? `${amount / 1e6}t` : formatWeight(amount);
+function renderAttendance() {
+  if (elements.attendanceList) {
+    elements.attendanceList.innerHTML = "";
+    for (const reward of ATTENDANCE_REWARDS) {
+      const claimed = state.attendance.claimedDays[reward.day];
+      const unlocked = state.attendance.count >= reward.day;
+      const button = document.createElement("button");
+      button.className = `game-card${claimed ? " claimed" : ""}`;
+      button.type = "button";
+      button.disabled = !unlocked || claimed;
+      button.innerHTML = `
+        <span class="card-icon">${claimed ? "✔" : unlocked ? "🎁" : "🔒"}</span>
+        <span>
+          <span class="card-title">${reward.day}일차${reward.isFinal ? " (마지막)" : ""}</span>
+          <span class="card-meta">${reward.label}</span>
+        </span>
+        <span class="card-cost">${claimed ? "완료" : unlocked ? "받기" : "대기"}</span>
+      `;
+      button.addEventListener("click", () => claimAttendanceReward(reward.day));
+      elements.attendanceList.append(button);
+    }
+  }
+
+  const attendanceQuickBtn = document.querySelector('.quick-menu-btn[data-quick="attendance"]');
+  if (attendanceQuickBtn) {
+    const hasClaimable = ATTENDANCE_REWARDS.some(
+      (reward) => state.attendance.count >= reward.day && !state.attendance.claimedDays[reward.day]
+    );
+    attendanceQuickBtn.classList.toggle("has-badge", hasClaimable);
+  }
 }
 
 function renderMilestones() {
@@ -1334,6 +1421,7 @@ function render() {
   renderUpgrades();
   renderRecipes();
   renderMissions();
+  renderAttendance();
   renderMilestones();
   renderStatsSummary();
   renderStatsUpgrades();
@@ -1482,6 +1570,7 @@ setupPhraseSign();
 resizeCanvas();
 checkGameLevelUp();
 checkMilestones();
+checkDailyAndWeeklyReset();
 render();
 syncFromServer();
 requestAnimationFrame(gameLoop);
