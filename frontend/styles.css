@@ -1141,6 +1141,14 @@ h2 {
 /* 스크롤은 이 안쪽 wrapper만 담당해서, 내용이 길어도 X 버튼은 항상 같은     */
 /* 자리에 고정되어 스크롤을 내리지 않고도 바로 닫을 수 있다.                  */
 /* ---------------------------------------------------------------------- */
+
+/* .quick-dialog / .level-dialog의 display:flex가 브라우저 기본값
+   dialog:not([open]) { display: none }을 덮어써서, 닫힌 팝업이 페이지 아래에
+   전부 펼쳐져 보이던 문제 방지 (TODO.md 3.4 Step 0) */
+dialog:not([open]) {
+  display: none;
+}
+
 .modal-close-btn {
   position: absolute;
   top: 10px;
@@ -2239,4 +2247,64 @@ body {
 /* 상태 패널 바깥 좌우 여백을 동일하게 적용 */
 .booster-status-panel {
   padding-inline: clamp(10px, 2vw, 18px);
+}
+
+/* ---------------------------------------------------------------------- */
+/* SPA 화면 전환 (js/router.js)                                             */
+/* 페이지 전체는 스크롤하지 않고, 하단 네비게이션 위 뷰포트 안에서 한 화면만   */
+/* 보여준다. 각 화면은 자기 영역 안에서만 스크롤된다.                          */
+/* ---------------------------------------------------------------------- */
+:root {
+  --bottom-nav-height: calc(76.8px + env(safe-area-inset-bottom, 0px));
+}
+
+body {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.screen-viewport {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: var(--bottom-nav-height);
+  left: 0;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  min-height: 0; /* 기존 .app / .app-screen의 100vh 최소 높이 대신 뷰포트 높이에 맞춤 (내용은 내부 스크롤) */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.screen[hidden] {
+  display: none;
+}
+
+/* 홈(.app 그리드)의 행이 뷰포트 높이로 늘어나며 .field(overflow:hidden)가 잘리지 않도록
+   행 높이를 내용 기준으로 고정한다. 넘치는 부분은 .screen 내부 스크롤로 본다. */
+.app.screen {
+  grid-template-rows: max-content;
+}
+
+.screen-enter {
+  animation: screen-fade-in 200ms ease-out;
+}
+
+@keyframes screen-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-enter {
+    animation: none;
+  }
 }

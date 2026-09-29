@@ -9,10 +9,12 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=36" />
+    <link rel="stylesheet" href="./styles.css?v=37" />
   </head>
   <body>
-    <main class="app" id="homeScreen">
+    <!-- 화면 뷰포트: 하단 네비게이션 위 영역. 6개 화면 중 하나만 보이고, 각 화면은 자기 안에서만 스크롤됨 (js/router.js) -->
+    <div id="screenViewport" class="screen-viewport">
+    <main class="app screen" id="homeScreen">
       <section class="field" aria-label="올리의 논">
         <canvas id="fieldCanvas" width="960" height="640" aria-hidden="true"></canvas>
 
@@ -211,7 +213,7 @@
     </main>
 
     <!-- 업그레이드 화면: 하단 네비게이션 '업그레이드' 버튼을 누르면 표시됨 (수동/자동 장비 + 레시피 통합) -->
-    <section id="upgradeScreen" class="app-screen" hidden aria-label="업그레이드">
+    <section id="upgradeScreen" class="app-screen screen" hidden aria-label="업그레이드">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2><img src="./assets/images/ui/ui_upgrade.png" alt="" />업그레이드</h2>
@@ -229,7 +231,7 @@
     </section>
 
     <!-- 미션 화면: 하단 네비게이션 '미션' 버튼을 누르면 표시됨 -->
-    <section id="missionScreen" class="app-screen" hidden aria-label="미션">
+    <section id="missionScreen" class="app-screen screen" hidden aria-label="미션">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2><img src="./assets/images/ui/ui_mission.png" alt="" />오늘의 미션</h2>
@@ -240,7 +242,7 @@
     </section>
 
     <!-- 통계 화면: 하단 네비게이션 '통계' 버튼을 누르면 표시됨 -->
-    <section id="statsScreen" class="app-screen" hidden aria-label="통계">
+    <section id="statsScreen" class="app-screen screen" hidden aria-label="통계">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2><img src="./assets/images/ui/ui_stats.png" alt="" />통계</h2>
@@ -269,7 +271,7 @@
     </section>
 
     <!-- 랭킹 화면: 하단 네비게이션 '랭킹' 버튼을 누르면 표시되며, 탭 클릭 시 서버에서 목록을 불러옴 -->
-    <section id="rankingScreen" class="app-screen" hidden aria-label="랭킹">
+    <section id="rankingScreen" class="app-screen screen" hidden aria-label="랭킹">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>랭킹</h2>
@@ -281,7 +283,7 @@
     </section>
 
     <!-- 친구 화면: 하단 네비게이션 '친구' 버튼을 누르면 표시되며, 탭 클릭 시 요청/친구 목록을 불러옴 -->
-    <section id="friendsScreen" class="app-screen" hidden aria-label="친구">
+    <section id="friendsScreen" class="app-screen screen" hidden aria-label="친구">
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>친구</h2>
@@ -306,8 +308,9 @@
         <div id="friendList" class="card-list"></div>
       </div>
     </section>
+    </div>
 
-    <!-- 하단 소프트키 네비게이션 -->
+    <!-- 하단 소프트키 네비게이션: 탭 클릭 시 URL 해시(#upgrade 등)를 바꾸고, 화면 전환은 js/router.js가 처리 -->
     <nav class="bottom-nav" aria-label="화면 이동">
       <button type="button" class="nav-btn active" data-tab="home">
         <img class="nav-btn-icon" src="./assets/images/ui/10_홈.png" alt="" />
@@ -411,43 +414,6 @@
       });
     </script>
     <script>
-      // 하단 소프트키 네비게이션: 탭 전환 로직
-      const screensByTab = {
-        home: document.getElementById("homeScreen"),
-        upgrade: document.getElementById("upgradeScreen"),
-        mission: document.getElementById("missionScreen"),
-        stats: document.getElementById("statsScreen"),
-        ranking: document.getElementById("rankingScreen"),
-        friends: document.getElementById("friendsScreen"),
-      };
-      const navButtons = document.querySelectorAll(".nav-btn");
-
-      function showTab(tab) {
-        Object.entries(screensByTab).forEach(([key, el]) => {
-          if (!el) return;
-          el.hidden = key !== tab;
-        });
-        navButtons.forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.tab === tab);
-        });
-        if (tab === "stats") requestAnimationFrame(centerCurrentMilestone);
-      }
-
-      navButtons.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          showTab(btn.dataset.tab);
-          if (btn.dataset.tab === "ranking" && typeof window.loadLeaderboard === "function") {
-            window.loadLeaderboard();
-          }
-          if (btn.dataset.tab === "friends" && typeof window.loadFriendsScreen === "function") {
-            window.loadFriendsScreen();
-          }
-        });
-      });
-
-      showTab("home");
-    </script>
-    <script>
       // 바로가기 메뉴(올리의 기록/이벤트/공지/오늘의 미션): 각각의 팝업 열기
       // 팝업 크기: 세로 = '올리의 기록' 버튼 ~ 하단 위젯 패널(문구/벼 성장/비료 사용) 상단 사이 실측 거리, 가로 = 그 패널의 실제 너비
       const quickDialogIds = {
@@ -508,5 +474,6 @@
       window.addEventListener("load", syncQuickMenuButtonSize);
       window.addEventListener("resize", syncQuickMenuButtonSize);
     </script>
+    <script src="./js/router.js?v=1"></script>
   </body>
 </html>
