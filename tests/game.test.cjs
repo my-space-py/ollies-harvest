@@ -332,3 +332,43 @@ test('reward lists keep the same button nodes across repeated renders so presses
   assert.equal(g.node('#attendanceList').children[0].disabled, true);
   assert.equal(g.node('#missionList').children[0].disabled, true);
 });
+
+test('random event: ready -> start -> complete -> reward makes rice x1.5, then cooldown picks a different event', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); checkEventState();
+    assert.equal(state.event.status, 'ready'); assert.ok(getEventDef(state.event.id));
+    state.event = { id: 'useFertilizer', status: 'ready', progress: 0, startedAt: 0, nextAt: 0 };
+    state.boosterCount = 1; useBooster(); assert.equal(state.event.progress, 0); // 시작 전 행동은 집계 안 함
+    advanceEvent('boosterUse'); assert.equal(state.event.status, 'ready');
+    startEvent(); assert.equal(state.event.status, 'active');
+    advanceEvent('click'); assert.equal(state.event.progress, 0); // 다른 종류 행동은 무시
+    state.boosterCount = 1; useBooster(); assert.equal(state.event.status, 'complete');
+    state.rice = 10000; claimEventReward(); assert.equal(state.rice, 15000);
+    assert.equal(state.event.status, 'claimed'); claimEventReward(); assert.equal(state.rice, 15000); // 중복 수령 방지
+    checkEventState(); assert.equal(state.event.status, 'claimed');`);
+  g.advance(g.run('EVENT_CONFIG.cooldownSeconds * 1000'));
+  g.run(`checkEventState(); assert.equal(state.event.status, 'ready'); assert.notEqual(state.event.id, 'useFertilizer');`);
+});
+
+test('timed click event fails after its limit, can be retried, and small balances get the minimum reward', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState();
+    state.event = { id: 'clickRush', status: 'ready', progress: 0, startedAt: 0, nextAt: 0 };
+    startEvent(); for (let i = 0; i < 19; i++) advanceEvent('click');
+    assert.equal(state.event.progress, 19);`);
+  g.advance(61000);
+  g.run(`advanceEvent('click'); assert.equal(state.event.status, 'failed');
+    startEvent(); assert.equal(state.event.status, 'active'); assert.equal(state.event.progress, 0);
+    for (let i = 0; i < 20; i++) advanceEvent('click'); assert.equal(state.event.status, 'complete');
+    state.rice = 10; claimEventReward(); assert.equal(state.rice, 10 + EVENT_CONFIG.minRewardRice);`);
+});
+
+test('event skip only works before starting or after failing; old saves without event data get a new event', () => {
+  createGame().run(`state = cloneInitialState();
+    state.event = { id: 'toolCare', status: 'ready', progress: 0, startedAt: 0, nextAt: 0 };
+    skipEvent(); assert.notEqual(state.event.id, 'toolCare'); assert.equal(state.event.status, 'ready');
+    startEvent(); const id = state.event.id; skipEvent(); assert.equal(state.event.id, id); // 진행 중엔 바꿀 수 없음
+    const legacy = cloneInitialState(); delete legacy.event;
+    state = normalizeState(legacy); assert.equal(state.event.status, 'none');
+    checkEventState(); assert.equal(state.event.status, 'ready');`);
+});
