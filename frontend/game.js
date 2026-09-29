@@ -247,7 +247,7 @@ function normalizeState(saved) {
   if (offlineGain >= 1) {
     merged.rice += offlineGain;
     merged.totalHarvested += offlineGain;
-    setTimeout(() => showToast(`쉬는 동안 올리가 +${formatWeight(offlineGain)}을 수확했어요.`), 300);
+    setTimeout(() => showToast(`쉬는 동안 올리가 수확했어요\n+${formatWeight(offlineGain)}`), 300);
   }
   merged.lastLoginTime = Date.now();
   return merged;
@@ -733,7 +733,7 @@ function claimLevelReward(level) {
       break;
   }
 
-  showToast(`게임 LV.${level} 달성! "${info.title}"${doubled ? " — 떡국 효과로 보상 2배!" : ""}`);
+  showToast(`게임 LV.${level} 달성!\n"${info.title}"${doubled ? "\n떡국 효과로 보상 2배!" : ""}`, { group: "level", merge: mergeLevelToasts });
   showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
   playGameSound("level");
@@ -777,7 +777,7 @@ function useBooster() {
   let duration = getNextBoosterDuration();
   // 켜져 있는 동안: 남은 시간 + 이번 시간이 최대치를 넘으면 사용하지 않음 (비료도 차감하지 않음)
   if (remaining > 0 && remaining + duration > maxSeconds) {
-    showToast(`비료는 최대 ${Math.round(maxSeconds / 60)}분을 넘을 수 없습니다. (남은 시간 ${formatDuration(remaining)} + 이번 비료 ${formatDuration(duration)})`);
+    showToast(`비료는 최대 ${Math.round(maxSeconds / 60)}분을 넘을 수 없습니다\n남은 시간 ${formatDuration(remaining)} + 이번 비료 ${formatDuration(duration)}`);
     return;
   }
   // 꺼져 있을 때 적립 시간(밥)이 너무 많으면 최대치까지만 쓰고, 못 쓴 적립 시간은 다음 비료에 남김
@@ -797,7 +797,7 @@ function useBooster() {
   showHappyPop(); // 올리 모습은 그대로, 머리 위로 happy 이미지가 잠깐 떠오름
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("upgrade");
-  showToast(`비료 부스터 사용! 전체 수확량 ${getBoosterMultiplier().toFixed(1)}배`);
+  showToast(`비료 부스터 사용!\n전체 수확량 ${getBoosterMultiplier().toFixed(1)}배`);
   state.dailyProgress.boosterUse = (state.dailyProgress.boosterUse || 0) + 1;
   advanceEvent("boosterUse");
   render();
@@ -900,8 +900,8 @@ function useRecipe(recipe) {
   if (getUnlockedRecipeCount() > unlockedBefore) {
     showActionEffect("./assets/images/effects/fx_recipe_unlock.png", undefined, undefined, "effect-unlock");
   }
-  const baseMessage = qty > 1 ? `${recipe.name} ×${qty} — ${recipe.message}` : recipe.message;
-  showToast(effectNotes.length ? `${baseMessage} (${effectNotes.join(" · ")})` : baseMessage);
+  const title = qty > 1 ? `${recipe.name} ×${qty}` : recipe.name;
+  showToast([title, recipe.message, effectNotes.join(" · ")].filter(Boolean).join("\n"));
   state.dailyProgress.recipe = (state.dailyProgress.recipe || 0) + 1; // "레시피 N회 사용" = 사용 액션 횟수 기준(수량 아님)
   advanceEvent("recipe");
 
@@ -943,7 +943,7 @@ function checkAttendanceProgress(today = getLocalDateKey()) {
   if (state.attendance.lastDateKey === today) return; // 같은 날 중복 인정 방지 (연속 접속을 요구하지는 않음)
   state.attendance.lastDateKey = today;
   state.attendance.count += 1;
-  showToast(`오늘 접속 확인! 출석 ${state.attendance.count}/${ATTENDANCE_REWARDS.length}일차`);
+  showToast(`오늘 접속 확인!\n출석 ${state.attendance.count}/${ATTENDANCE_REWARDS.length}일차`);
 }
 
 function claimAttendanceReward(day) {
@@ -970,7 +970,7 @@ function claimAttendanceReward(day) {
 
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound(reward.isFinal ? "festival" : "upgrade");
-  showToast(`${day}일차 출석 보상: ${reward.label}`);
+  showToast(`${day}일차 출석 보상\n${reward.label}`);
   render();
   saveState(true);
 }
@@ -1030,7 +1030,7 @@ function holdFeast(feast) {
   if (reward.flag) state.unlockFlags[reward.flag] = true;
   showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
   playGameSound("festival");
-  showToast(`${feast.name} 개최! ${feast.message} (${reward.label})`);
+  showToast(`🎉 ${feast.name} 개최!\n${feast.message}\n${reward.label}`);
   afterConsume();
 }
 
@@ -1053,7 +1053,7 @@ function checkDonationBadges() {
     if (!state.donationBadges[badge.id] && state.donated >= badge.amount) {
       state.donationBadges[badge.id] = true;
       state.boosterCount += badge.reward.booster || 0;
-      showToast(`기부 배지 "${badge.name}" 획득! 비료 부스터 +${badge.reward.booster}`);
+      showToast(`기부 배지 "${badge.name}" 획득!\n비료 부스터 +${badge.reward.booster}`);
     }
   }
 }
@@ -1063,7 +1063,7 @@ function donateRice() {
   if (amount < DONATION_CONFIG.minAmount) return;
   if (!consumeRice(amount)) return;
   state.donated += amount;
-  showToast(`쌀 ${formatWeight(amount)}을 이웃에게 기부했어요. 고마워요!`);
+  showToast(`쌀 ${formatWeight(amount)} 기부 완료\n이웃에게 잘 전달할게요. 고마워요!`);
   checkDonationBadges();
   afterConsume();
 }
@@ -1111,7 +1111,7 @@ function deliverOrder() {
   if (!consumeRice(recipe.cost * order.qty)) return;
   gainRice(order.reward);
   state.boosterCount += order.booster;
-  showToast(`${order.customer}에 ${recipe.name.replace(/ \S+$/, "")} ${order.qty}개 납품 완료! 대금 +${formatWeight(order.reward)}${order.booster ? " · 비료 +1" : ""}`);
+  showToast(`📦 납품 완료!\n${order.customer} · ${recipe.name.replace(/ \S+$/, "")} ${order.qty}개\n대금 +${formatWeight(order.reward)}${order.booster ? " · 비료 +1" : ""}`);
   endOrder();
   afterConsume();
 }
@@ -1166,7 +1166,7 @@ function startEvent() {
   ev.status = "active";
   ev.progress = 0;
   ev.startedAt = Date.now();
-  showToast(`이벤트 시작! ${def.description}`);
+  showToast(`이벤트 시작!\n${def.description}`);
   render();
   saveState(true);
 }
@@ -1182,7 +1182,7 @@ function advanceEvent(type, amount = 1) {
   ev.progress = Math.min(def.target, ev.progress + amount);
   if (ev.progress >= def.target) {
     ev.status = "complete";
-    showToast(`이벤트 "${def.name}" 달성! 이벤트 창에서 보상을 받으세요.`);
+    showToast(`이벤트 "${def.name}" 달성!\n이벤트 창에서 보상을 받으세요`);
   }
 }
 
@@ -1196,7 +1196,7 @@ function claimEventReward() {
   showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("festival");
-  showToast(`이벤트 보상: 쌀알 +${formatWeight(reward)}`);
+  showToast(`이벤트 보상\n쌀알 +${formatWeight(reward)}`);
   render();
   saveState(true);
 }
@@ -1272,7 +1272,7 @@ function claimDailyMission(mission) {
 
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("upgrade");
-  showToast(`${mission.name} 완료: ${reward.label}`);
+  showToast(`${mission.name} 완료\n${reward.label}`);
   render();
   saveState(true);
 }
@@ -1282,7 +1282,7 @@ function checkMilestones() {
     if (!state.claimedMilestones[milestone.id] && state.consumed >= milestone.amount) {
       state.claimedMilestones[milestone.id] = true;
       applyMilestoneReward(milestone.reward);
-      showToast(`${formatMilestoneWeight(milestone.amount)} 소비 달성! ${milestone.reward.label}`);
+      showToast(`${formatMilestoneWeight(milestone.amount)} 소비 달성!\n${milestone.reward.label}`, { group: "milestone", merge: mergeMilestoneToasts });
     }
   }
 }
@@ -1303,11 +1303,74 @@ function applyMilestoneReward(reward) {
 // ----------------------------------------------------------------------------
 // 이펙트 / 사운드 유틸 (기존과 동일)
 // ----------------------------------------------------------------------------
-function showToast(message) {
-  clearTimeout(toastTimer);
-  elements.toast.textContent = message;
+// 알림: 메시지의 "\n"으로 줄을 나눠 첫 줄은 제목(굵게), 나머지는 설명 줄로 표시한다.
+// 한 행동에서 알림이 여러 개 나와도(예: 잔치 + LV업) 덮어쓰지 않고 순서대로 보여준다.
+const TOAST_BASE_MS = 2200;
+const TOAST_PER_LINE_MS = 700; // 설명 줄이 늘어날수록 조금 더 오래
+const TOAST_GAP_MS = 180;
+const TOAST_QUEUE_MAX = 5; // 대기 알림이 너무 쌓이면 오래된 것부터 버림 (같은 종류는 아래처럼 하나로 합쳐짐)
+const TOAST_MERGE_MAX_LINES = 3;
+const toastQueue = []; // { message, group, parts }
+let toastShowing = false;
+
+function renderToast(message) {
+  const lines = String(message).split("\n").map((line) => line.trim()).filter(Boolean);
+  elements.toast.innerHTML = "";
+  lines.forEach((line, index) => {
+    const span = document.createElement("span");
+    span.className = index === 0 ? "toast-title" : "toast-line";
+    span.textContent = line;
+    elements.toast.append(span);
+  });
+  return lines.length;
+}
+
+function showNextToast() {
+  const item = toastQueue.shift();
+  if (item === undefined) {
+    toastShowing = false;
+    return;
+  }
+  toastShowing = true;
+  const lineCount = renderToast(item.message);
   elements.toast.classList.add("show");
-  toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2400);
+  toastTimer = setTimeout(() => {
+    elements.toast.classList.remove("show");
+    toastTimer = setTimeout(showNextToast, TOAST_GAP_MS);
+  }, TOAST_BASE_MS + Math.max(0, lineCount - 1) * TOAST_PER_LINE_MS);
+}
+
+// options.group: 같은 종류의 알림이 아직 대기 중이면 새로 쌓지 않고 합친다.
+// options.merge(parts): 합쳐진 메시지들로 표시할 문구를 만든다 (없으면 가장 최근 것만 표시).
+function showToast(message, options = {}) {
+  const { group, merge } = options;
+  const pending = group && toastQueue.find((item) => item.group === group);
+  if (pending) {
+    pending.parts.push(message);
+    pending.message = merge ? merge(pending.parts) : message;
+    return;
+  }
+  if (toastQueue.at(-1)?.message === message) return; // 같은 알림 연속 중복은 한 번만
+  toastQueue.push({ message, group, parts: [message] });
+  if (toastQueue.length > TOAST_QUEUE_MAX) toastQueue.shift();
+  if (!toastShowing) showNextToast();
+}
+
+// 한 번에 여러 LV이 오르면: 가장 높은 LV만, 몇 LV이 올랐는지 함께 표시
+function mergeLevelToasts(parts) {
+  const levels = parts.map((part) => Number((part.match(/LV\.(\d+)/) || [])[1])).filter(Boolean);
+  const last = parts.at(-1);
+  if (levels.length < 2) return last;
+  const [title, ...rest] = last.split("\n");
+  return [`${title} (LV.${levels[0]}~${levels.at(-1)})`, ...rest].join("\n");
+}
+
+// 한 번에 여러 소비 마일스톤을 달성하면: 하나의 알림에 보상을 줄줄이 (너무 많으면 "외 N개")
+function mergeMilestoneToasts(parts) {
+  const rows = parts.map((part) => part.replace(" 소비 달성!", "").split("\n").join(" · "));
+  const shown = rows.slice(0, TOAST_MERGE_MAX_LINES);
+  if (rows.length > shown.length) shown.push(`외 ${rows.length - shown.length}개`);
+  return [`소비 마일스톤 ${rows.length}개 달성!`, ...shown].join("\n");
 }
 
 function showFloat(amount, x, y) {
@@ -2152,7 +2215,7 @@ function addAdminRice(rawAmount, unit = "kg") {
   const text = String(rawAmount).trim();
   const units = { g: 1, kg: 1000, t: 1000000 };
   if (!/^[0-9]+$/.test(text) || !Object.prototype.hasOwnProperty.call(units, unit)) {
-    showToast("양의 정수를 입력해주세요. (숫자만 허용)");
+    showToast("양의 정수를 입력해주세요\n숫자만 입력할 수 있어요");
     return false;
   }
   const amount = Number(text) * units[unit];
@@ -2160,7 +2223,7 @@ function addAdminRice(rawAmount, unit = "kg") {
   if (!Number.isSafeInteger(amount) || amount <= 0 || amount > ADMIN_CONFIG.maxGrantRice
       || !Number.isFinite(state.rice) || state.rice < 0 || !Number.isFinite(nextRice)
       || nextRice > ADMIN_CONFIG.maxRiceBalance || nextRice <= state.rice) {
-    showToast(`지급은 1g~${formatWeight(ADMIN_CONFIG.maxGrantRice)} 범위이며 보유량 상한을 넘을 수 없어요.`);
+    showToast(`지급할 수 없는 양이에요\n1g~${formatWeight(ADMIN_CONFIG.maxGrantRice)}, 보유량 상한 이내`);
     return false;
   }
   // gainRice()는 누적/주간 수확량도 바꾸므로 관리자 지급에는 사용하지 않습니다.
@@ -2230,7 +2293,7 @@ function setAdminLevel(targetLevel) {
   checkMilestones();
   render();
   saveState(true);
-  showToast(`관리자: 게임 LV.${target.level} "${target.title}"(으)로 이동했어요.`);
+  showToast(`관리자 · 게임 LV 이동\nLV.${target.level} "${target.title}"`);
   return true;
 }
 

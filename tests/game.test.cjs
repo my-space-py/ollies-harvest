@@ -63,6 +63,7 @@ function createGame(enabled = true) {
   vm.runInContext(gameSource, sandbox);
   const run = code => vm.runInContext(code, sandbox);
   run(`
+    var realShowToast = showToast; // 알림 큐 테스트용으로 진짜 함수를 보관
     render = renderUpgrades = renderRecipes = renderStatsSummary = () => {};
     showToast = showOllieReaction = showActionEffect = playGameSound = () => {};
     function resetReady() {
@@ -679,4 +680,38 @@ test('reset asks first: opening the dialog changes nothing; confirming resets an
   const put = g.requests.slice(requestsBefore).find(r => r.options && r.options.method === 'PUT');
   assert.ok(put, 'reset must push the fresh state to the server right away');
   assert.equal(JSON.parse(put.options.body).data.rice, 0);
+});
+
+test('toasts render a bold title plus detail lines and are shown one after another instead of overwriting', () => {
+  const g = createGame();
+  const toast = g.node('#toast');
+  g.run(`realShowToast('🎉 동네 밥상 개최!\\n이웃들과 밥상을 나눴어요\\n전체 수확 영구 +5%');
+    realShowToast('게임 LV.4 달성!\\n"능숙한 농부"');`);
+  assert.deepEqual(toast.children.map(c => [c.className, c.textContent]), [
+    ['toast-title', '🎉 동네 밥상 개최!'], ['toast-line', '이웃들과 밥상을 나눴어요'], ['toast-line', '전체 수확 영구 +5%']]);
+  g.advance(2200 + 2 * 700 - 1);
+  assert.equal(toast.children[0].textContent, '🎉 동네 밥상 개최!'); // 3줄이면 조금 더 오래 보임
+  g.advance(1);   // 첫 알림 숨김
+  g.advance(180); // 잠깐 쉬고 다음 알림
+  assert.deepEqual(toast.children.map(c => c.textContent), ['게임 LV.4 달성!', '"능숙한 농부"']); // 다음 알림이 이어서
+  g.advance(2200 + 700);
+  g.advance(180);
+  g.run(`assert.equal(toastShowing, false); assert.equal(toastQueue.length, 0);`);
+});
+
+test('toasts of the same kind merge while waiting: many LV-ups become one, many milestones become one list', () => {
+  const g = createGame();
+  const toast = g.node('#toast');
+  g.run(`showToast = realShowToast;
+    state = cloneInitialState(); state.rice = 1e6;
+    for (const m of milestones) state.claimedMilestones[m.id] = false;
+    holdFeast(FEASTS[0]);                       // 잔치 30kg → LV.2·3·4 + 마일스톤 1·5·10·20kg가 한 번에
+    assert.equal(state.level, 4);
+    assert.equal(toastQueue.length, 2);          // 잔치(표시 중) 뒤에 LV 1개 + 마일스톤 1개만 대기`);
+  assert.equal(toast.children[0].textContent, '🎉 동네 밥상 개최!');
+  const texts = () => toast.children.map(c => c.textContent);
+  g.advance(2200 + 2 * 700); g.advance(180);
+  assert.deepEqual(texts(), ['게임 LV.4 달성! (LV.2~4)', '"능숙한 농부"']);
+  g.advance(2200 + 700); g.advance(180);
+  assert.deepEqual(texts(), ['소비 마일스톤 4개 달성!', '1kg · 비료 부스터 +1', '5kg · 쌀알 +1kg', '10kg · 비료 부스터 +2', '외 1개']);
 });

@@ -3175,3 +3175,51 @@ button {
     font-size: 12px;
   }
 }
+
+/* ---------------------------------------------------------------------- */
+/* 알림(토스트): 화면 폭을 제대로 쓰고, 단어 단위로 줄바꿈, 제목 + 설명 줄 */
+/* ---------------------------------------------------------------------- */
+.toast {
+  /* left:50% 기준이라 기본 폭이 화면 절반으로 줄어들던 문제 → 내용 폭 기준, 최대 폭 제한 */
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(109, 75, 18, 0.2);
+  text-align: center;
+  line-height: 1.45;
+  word-break: keep-all; /* 한국어는 단어(어절) 단위로 줄바꿈 */
+  overflow-wrap: anywhere; /* 아주 긴 단어만 예외적으로 끊음 */
+  background: #fffaeb; /* 반투명이면 뒤의 글자가 비쳐 읽기 어려워 불투명하게 */
+  border-color: rgba(210, 155, 42, 0.45);
+}
+
+.toast-title,
+.toast-line {
+  display: block;
+}
+
+.toast-title {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.toast-line {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+@media (max-width: 600px) {
+  .toast {
+    max-width: calc(100vw - 40px);
+    padding: 11px 16px;
+  }
+  .toast-title {
+    font-size: 15px;
+  }
+  .toast-line {
+    font-size: 13px;
+  }
+}
