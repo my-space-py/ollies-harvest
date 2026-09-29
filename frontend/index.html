@@ -18,7 +18,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=48" />
+    <link rel="stylesheet" href="./styles.css?v=53" />
   </head>
   <body>
     <!-- 화면 뷰포트: 하단 네비게이션 위 영역. 6개 화면 중 하나만 보이고, 각 화면은 자기 안에서만 스크롤됨 (js/router.js) -->
@@ -48,10 +48,6 @@
           </div>
 
           <div class="toolbar">
-            <button id="saveButton" type="button" title="저장">
-              <img src="./assets/images/ui/ui_storage.png" alt="" />
-              <span>저장</span>
-            </button>
             <button id="resetButton" type="button" title="초기화">
               <img src="./assets/images/ui/ui_settings.png" alt="" />
               <span>초기화</span>
@@ -174,6 +170,13 @@
             </div>
             <button type="submit">쌀알 추가</button>
           </form>
+          <form id="adminLevelForm" class="admin-level-form">
+            <label for="adminLevelSelect">게임 LV 이동 (누적 소비량을 그 LV 기준값으로)</label>
+            <div class="admin-input-row">
+              <select id="adminLevelSelect" aria-label="이동할 게임 LV"></select>
+              <button type="submit">이동</button>
+            </div>
+          </form>
           <button id="closeAdminButton" type="button">관리자 모드 닫기</button>
         </aside>
 
@@ -266,17 +269,6 @@
       </div>
     </section>
 
-    <!-- 미션 화면: 하단 네비게이션 '미션' 버튼을 누르면 표시됨 -->
-    <section id="missionScreen" class="app-screen screen" hidden aria-label="미션">
-      <div class="panel-section screen-inner">
-        <div class="section-title">
-          <h2><img src="./assets/images/ui/ui_mission.png" alt="" />오늘의 미션</h2>
-          <span>매일 자정(로컬 기준) 초기화</span>
-        </div>
-        <div id="missionList" class="card-list"></div>
-      </div>
-    </section>
-
     <!-- 통계 화면: 하단 네비게이션 '통계' 버튼을 누르면 표시됨 -->
     <section id="statsScreen" class="app-screen screen" hidden aria-label="통계">
       <div class="panel-section screen-inner">
@@ -359,10 +351,6 @@
       <button type="button" class="nav-btn" data-tab="consume">
         <img class="nav-btn-icon" src="./assets/images/ui/ui_recipe.png" alt="" />
         <span class="nav-btn-label">쌀 소비</span>
-      </button>
-      <button type="button" class="nav-btn" data-tab="mission">
-        <img class="nav-btn-icon" src="./assets/images/ui/12_미션.png" alt="" />
-        <span class="nav-btn-label">미션</span>
       </button>
       <button type="button" class="nav-btn" data-tab="stats">
         <img class="nav-btn-icon" src="./assets/images/ui/ui_stats.png" alt="" />
@@ -525,10 +513,24 @@
       </div>
     </dialog>
 
+    <!-- 초기화 확인: '예, 초기화'를 눌러야만 진행 삭제 -->
+    <dialog id="resetDialog" class="quick-dialog confirm-dialog" aria-labelledby="resetDialogTitle">
+      <h2 id="resetDialogTitle">정말 초기화할까요?</h2>
+      <p class="confirm-message">
+        보유 쌀알, 누적 소비량, 게임 LV, 장비, 레시피·잔치·기부 기록, 미션·출석·이벤트 진행이
+        <strong>모두 지워지고 처음부터 다시 시작</strong>해요. 되돌릴 수 없어요.
+      </p>
+      <p class="confirm-note">계정과 친구 목록은 그대로 유지돼요.</p>
+      <div class="confirm-actions">
+        <button type="button" class="confirm-cancel" data-close="resetDialog" autofocus>아니요</button>
+        <button type="button" id="confirmResetButton" class="confirm-danger">예, 초기화</button>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="./js/balance-config.js?v=9"></script>
-    <script src="./game.js?v=30"></script>
+    <script src="./game.js?v=35"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -611,6 +613,6 @@
       window.addEventListener("load", syncQuickMenuButtonSize);
       window.addEventListener("resize", syncQuickMenuButtonSize);
     </script>
-    <script src="./js/router.js?v=2"></script>
+    <script src="./js/router.js?v=3"></script>
   </body>
 </html>

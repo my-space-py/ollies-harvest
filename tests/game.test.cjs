@@ -36,6 +36,7 @@ function createGame(enabled = true) {
     addEventListener(name, fn) { (this.events[name] ??= []).push(fn); }
     emit(name, event = {}) { for (const fn of this.events[name] || []) fn({ preventDefault() {}, ...event }); }
     append(child) { this.children.push(child); }
+    remove() { this.removed = true; }
     setAttribute(name, value) { this.attributes[name] = value; }
     getAttribute(name) { return name === 'src' ? (this.src ?? null) : (this.attributes[name] ?? null); }
     getContext() { return {}; }
@@ -322,7 +323,7 @@ test('reward lists keep the same button nodes across repeated renders so presses
   const g = createGame();
   g.run(`state = cloneInitialState(); state.attendance.count = 7; state.dailyProgress.click = 30;
     renderAttendance(); renderMissions();`);
-  for (const selector of ['#attendanceList', '#missionList', '#missionDialogList']) {
+  for (const selector of ['#attendanceList', '#missionDialogList']) {
     const list = g.node(selector);
     const first = list.children[0];
     g.run('renderAttendance(); renderMissions();'); // 게임 루프의 300ms 주기 렌더링
@@ -335,7 +336,7 @@ test('reward lists keep the same button nodes across repeated renders so presses
     assert.equal(state.dailyClaimed.dailyClick, true); assert.equal(state.boosterCount, 1);
     renderAttendance(); renderMissions();`);
   assert.equal(g.node('#attendanceList').children[0].disabled, true);
-  assert.equal(g.node('#missionList').children[0].disabled, true);
+  assert.equal(g.node('#missionDialogList').children[0].disabled, true);
 });
 
 test('random event: ready -> start -> complete -> reward makes rice x1.5, then cooldown picks a different event', () => {
@@ -605,4 +606,77 @@ test('Ollie base image follows game LV (ollie_1..12.png) and falls back to the d
   assert.equal(img.src, './assets/images/characters/ollie_harvest.png'); // 다시 요청하지 않음
   g.run('state.level = 3; renderStats();');
   assert.equal(img.src, './assets/images/characters/ollie_3.png');      // 다른 LV 파일은 따로 시도
+});
+
+test('using fertilizer shows a floating happy image above Ollie instead of swapping Ollie\'s picture', () => {
+  const g = createGame();
+  g.run(`let reactions = 0; showOllieReaction = () => { reactions += 1; };
+    state = cloneInitialState(); state.boosterCount = 1; renderStats();
+    const before = elements.ollieImage.src; const layerCount = elements.floatLayer.children.length;
+    useBooster();
+    assert.equal(reactions, 0);                                   // 올리 이미지는 바꾸지 않음
+    assert.equal(elements.ollieImage.src, before);
+    const pop = elements.floatLayer.children.at(-1);
+    assert.equal(elements.floatLayer.children.length, layerCount + 1);
+    assert.equal(pop.className, 'happy-pop');
+    assert.ok(HAPPY_POP_IMAGES.some(src => pop.innerHTML.includes(src)));`);
+});
+
+test('happy pop picks one of happy1~3 at random (never the same twice in a row) and shows only one per action', () => {
+  const g = createGame();
+  g.run(`const picks = []; for (let i = 0; i < 300; i++) picks.push(pickHappyPopImage());
+    assert.equal(new Set(picks).size, 3);
+    for (let i = 1; i < picks.length; i++) assert.notEqual(picks[i], picks[i - 1]);
+    assert.deepEqual(HAPPY_POP_IMAGES.map(src => src.split('/').pop()), ['happy1.png', 'happy2.png', 'happy3.png']);
+    let swaps = []; showOllieReaction = (src) => swaps.push(src);
+    resetReady(); state.consumed = 999; state.level = 1; state.claimedLevelRewards = {};
+    const before = elements.floatLayer.children.length;
+    useRecipe(recipe('meal'));                       // 레시피 + LV.2 달성이 한 번에 일어나도
+    assert.equal(state.level, 2);
+    const pops = elements.floatLayer.children.slice(before).filter(c => c.className === 'happy-pop');
+    assert.equal(pops.length, 1);                    // 하나만 뜸
+    assert.ok(!swaps.some(src => src.includes('ollie_happy'))); // 올리 이미지를 ollie_happy로 바꾸지 않음`);
+  g.advance(400);
+  g.run(`const beforeBooster = elements.floatLayer.children.length; state.boosterCount = 1; useBooster();
+    assert.equal(elements.floatLayer.children.slice(beforeBooster).filter(c => c.className === 'happy-pop').length, 1); // 0.3초 뒤엔 다시 뜸`);
+});
+
+test('admin level move: 12 -> 3 reverts higher-LV and higher-milestone rewards; climbing back re-grants them once (no stacking)', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.rice = 0;
+    const fresh3 = cloneInitialState(); // 비교용: 처음부터 LV.3(5kg)까지 정상 진행한 상태
+    setAdminLevel(3); const normal3 = JSON.stringify({ b: state.boosterCount, p: state.permanentBonus, ma: state.milestoneAutoBonus, bd: state.permanentBoosterDurationSeconds, f: state.unlockFlags, m: state.claimedMilestones });
+    setAdminLevel(12);
+    assert.equal(state.level, 12); assert.equal(state.consumed, 1600000000000); assert.equal(state.festivalHeld, true);
+    const at12 = JSON.stringify({ b: state.boosterCount, p: state.permanentBonus, ma: state.milestoneAutoBonus, bd: state.permanentBoosterDurationSeconds, f: state.unlockFlags, rice: state.rice });
+    assert.ok(state.permanentBonus.all > 0.3);                     // LV·마일스톤 보상이 쌓인 상태
+    setAdminLevel(3);
+    assert.equal(state.level, 3); assert.equal(state.consumed, 5000); assert.equal(state.festivalHeld, false);
+    assert.equal(JSON.stringify({ b: state.boosterCount, p: state.permanentBonus, ma: state.milestoneAutoBonus, bd: state.permanentBoosterDurationSeconds, f: state.unlockFlags, m: state.claimedMilestones }), normal3);
+    assert.deepEqual(Object.keys(state.claimedLevelRewards).map(Number).sort((a, b) => a - b), [2, 3]);
+    setAdminLevel(12);                                             // 다시 올라가면 보상이 한 번 더 — 누적되지 않음
+    assert.equal(JSON.stringify({ b: state.boosterCount, p: state.permanentBonus, ma: state.milestoneAutoBonus, bd: state.permanentBoosterDurationSeconds, f: state.unlockFlags, rice: state.rice }), at12);
+    assert.equal(setAdminLevel(99), false); assert.equal(state.level, 12);`);
+});
+
+test('admin level move is blocked when admin mode is disabled', () => {
+  createGame(false).run(`state = cloneInitialState(); assert.equal(setAdminLevel(5), false);
+    assert.equal(state.level, 1); assert.equal(state.consumed, 0);`);
+});
+
+test('reset asks first: opening the dialog changes nothing; confirming resets and immediately overwrites the server save', () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 7 }));
+  g.run(`let opened = 0; elements.resetDialog.showModal = () => { opened += 1; elements.resetDialog.open = true; };
+    elements.resetDialog.close = () => { elements.resetDialog.open = false; };
+    state = cloneInitialState(); state.rice = 12345; state.consumed = 999; state.level = 1;
+    const before = JSON.stringify(state);
+    openResetDialog();
+    assert.equal(opened, 1); assert.equal(JSON.stringify(state), before); // 팝업만 뜨고 그대로`);
+  const requestsBefore = g.requests.length;
+  g.run(`confirmReset();
+    assert.equal(state.rice, 0); assert.equal(state.consumed, 0); assert.equal(elements.resetDialog.open, false);`);
+  const put = g.requests.slice(requestsBefore).find(r => r.options && r.options.method === 'PUT');
+  assert.ok(put, 'reset must push the fresh state to the server right away');
+  assert.equal(JSON.parse(put.options.body).data.rice, 0);
 });

@@ -123,7 +123,6 @@ const elements = {
   donationBadgeList: document.querySelector("#donationBadgeList"),
   orderList: document.querySelector("#orderList"),
   orderSkipButton: document.querySelector("#orderSkipButton"),
-  missionList: document.querySelector("#missionList"),
   missionDialogList: document.querySelector("#missionDialogList"),
   attendanceList: document.querySelector("#attendanceList"),
   eventList: document.querySelector("#eventList"),
@@ -157,8 +156,9 @@ const elements = {
   harvestButton: document.querySelector("#harvestButton"),
   ollieImage: document.querySelector("#ollieImage"),
   floatLayer: document.querySelector("#floatLayer"),
-  saveButton: document.querySelector("#saveButton"),
   resetButton: document.querySelector("#resetButton"),
+  resetDialog: document.querySelector("#resetDialog"),
+  confirmResetButton: document.querySelector("#confirmResetButton"),
   soundButton: document.querySelector("#soundButton"),
   soundIcon: document.querySelector("#soundIcon"),
   toast: document.querySelector("#toast"),
@@ -734,7 +734,7 @@ function claimLevelReward(level) {
   }
 
   showToast(`게임 LV.${level} 달성! "${info.title}"${doubled ? " — 떡국 효과로 보상 2배!" : ""}`);
-  showOllieReaction("./assets/images/characters/ollie_happy.png", 1400);
+  showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
   playGameSound("level");
 
@@ -794,7 +794,7 @@ function useBooster() {
   if (state.boosterMultiplierCharges > 0) state.boosterMultiplierCharges -= 1;
   state.boosterDurationBonusSeconds = unusedMealBonus;
   state.boosterEndTime = Math.min(MAX_EFFECT_TIMESTAMP, currentEnd + duration * 1000);
-  showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
+  showHappyPop(); // 올리 모습은 그대로, 머리 위로 happy 이미지가 잠깐 떠오름
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("upgrade");
   showToast(`비료 부스터 사용! 전체 수확량 ${getBoosterMultiplier().toFixed(1)}배`);
@@ -894,7 +894,7 @@ function useRecipe(recipe) {
     effectNotes.push(granted > 0 ? `비료 부스터 +${granted}` : "오늘 받을 수 있는 비료를 모두 받았어요");
   }
 
-  showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
+  showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_consume_complete.png");
   playGameSound("recipe");
   if (getUnlockedRecipeCount() > unlockedBefore) {
@@ -1001,7 +1001,7 @@ function consumeRice(amount) {
 }
 
 function afterConsume() {
-  showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
+  showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_consume_complete.png");
   playGameSound("recipe");
   checkGameLevelUp();
@@ -1193,7 +1193,7 @@ function claimEventReward() {
   gainRice(reward);
   ev.status = "claimed";
   ev.nextAt = Date.now() + EVENT_CONFIG.cooldownSeconds * 1000;
-  showOllieReaction("./assets/images/characters/ollie_happy.png", 1200);
+  showHappyPop(); // 올리 이미지는 그대로, 머리 위로 happy1~3 중 하나
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound("festival");
   showToast(`이벤트 보상: 쌀알 +${formatWeight(reward)}`);
@@ -1393,6 +1393,40 @@ function showOllieReaction(src, duration = 900) {
   }, duration);
 }
 
+// 기쁜 순간(비료·레시피·LV업·잔치/기부/주문·이벤트 보상) 올리 머리 위로 떠올랐다 사라지는 이미지.
+// 아래 중 무작위 1장(직전과 다른 것). 파일이 없으면 😊로 대신 표시
+const HAPPY_POP_IMAGES = [
+  "./assets/images/effects/happy1.png",
+  "./assets/images/effects/happy2.png",
+  "./assets/images/effects/happy3.png",
+];
+const HAPPY_POP_MS = 1300;
+const HAPPY_POP_DEDUPE_MS = 300; // 한 번의 행동에서 여러 번 불려도(예: 레시피 + LV업) 하나만 띄움
+let lastHappyPopIndex = -1;
+let lastHappyPopAt = -Infinity;
+
+function pickHappyPopImage(random = Math.random) {
+  let index = Math.floor(random() * HAPPY_POP_IMAGES.length);
+  if (HAPPY_POP_IMAGES.length > 1 && index === lastHappyPopIndex) index = (index + 1) % HAPPY_POP_IMAGES.length;
+  lastHappyPopIndex = index;
+  return HAPPY_POP_IMAGES[index];
+}
+
+function showHappyPop() {
+  const now = performance.now();
+  if (now - lastHappyPopAt < HAPPY_POP_DEDUPE_MS) return;
+  lastHappyPopAt = now;
+  const layerRect = elements.floatLayer.getBoundingClientRect();
+  const ollieRect = elements.harvestButton.getBoundingClientRect();
+  const pop = document.createElement("div");
+  pop.className = "happy-pop";
+  pop.style.left = `${ollieRect.left - layerRect.left + ollieRect.width / 2}px`;
+  pop.style.top = `${ollieRect.top - layerRect.top + ollieRect.height * 0.12}px`; // 올리 머리 부근
+  pop.innerHTML = iconHtml(pickHappyPopImage(), "😊");
+  elements.floatLayer.append(pop);
+  setTimeout(() => pop.remove(), HAPPY_POP_MS);
+}
+
 function showActionEffect(src, x, y, className = "") {
   const effect = document.createElement("img");
   effect.className = `action-effect ${className}`.trim();
@@ -1411,9 +1445,19 @@ function resetGame() {
   clearTimeout(ollieReactionTimer);
   ollieReactionTimer = 0;
   setOllieImage(getOllieBaseImage());
-  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  saveState(true); // 로컬 + 서버 저장을 바로 덮어써서 다른 기기/재접속 때 예전 진행이 돌아오지 않게
   render();
   showToast("올리의 농장을 새로 시작했어요.");
+}
+
+// 초기화 버튼: 확인 팝업을 띄우고, '예, 초기화'를 눌렀을 때만 resetGame()
+function openResetDialog() {
+  if (elements.resetDialog && elements.resetDialog.showModal) elements.resetDialog.showModal();
+}
+
+function confirmReset() {
+  if (elements.resetDialog && elements.resetDialog.open) elements.resetDialog.close();
+  resetGame();
 }
 
 function resizeCanvas() {
@@ -1889,7 +1933,7 @@ function renderStableButtonList(container, items, getView, onClick) {
 }
 
 function renderMissions() {
-  const containers = [elements.missionList, elements.missionDialogList].filter(Boolean);
+  const containers = [elements.missionDialogList].filter(Boolean); // 오늘의 미션: 홈 퀵메뉴 팝업
   const getView = (mission) => {
     const progress = Math.min(state.dailyProgress[mission.type] || 0, mission.target);
     const done = progress >= mission.target;
@@ -2131,6 +2175,65 @@ function addAdminRice(rawAmount, unit = "kg") {
   return true;
 }
 
+// 관리자: 게임 LV 이동. 누적 소비량을 목표 LV 기준값으로 맞춘다.
+// 내려갈 때는 목표보다 높은 LV의 보상과, 새 소비량보다 큰 소비 마일스톤의 보상을 되돌리고
+// 기록을 지워, 다시 올라가면 연출·보상이 한 번 더(중복 누적 없이) 나오게 한다.
+// 장비 티어, 잔치·기부·레시피 사용 기록 등 다른 기록은 그대로 둔다.
+function revertLevelReward(level) {
+  if (!state.claimedLevelRewards[level]) return;
+  delete state.claimedLevelRewards[level];
+  const reward = getGameLevelInfo(level).reward;
+  const minus = (value, amount) => Math.max(0, Number(((value || 0) - amount).toFixed(10)));
+  switch (reward.type) {
+    case "booster": state.boosterCount = minus(state.boosterCount, reward.amount); break;
+    case "clickPermanent": state.permanentBonus.click = minus(state.permanentBonus.click, reward.amount); break;
+    case "autoPermanent": state.permanentBonus.auto = minus(state.permanentBonus.auto, reward.amount); break;
+    case "allPermanent": state.permanentBonus.all = minus(state.permanentBonus.all, reward.amount); break;
+    case "boosterMultiplierBonus": state.boosterMultiplierBonus = minus(state.boosterMultiplierBonus, reward.amount); break;
+    case "unlockFlag": delete state.unlockFlags[reward.flag]; break;
+    default: break;
+  }
+}
+
+function revertMilestoneReward(milestone) {
+  if (!state.claimedMilestones[milestone.id]) return;
+  state.claimedMilestones[milestone.id] = false;
+  const reward = milestone.reward;
+  const minus = (value, amount) => Math.max(0, Number(((value || 0) - amount).toFixed(10)));
+  switch (reward.type) {
+    case "booster": state.boosterCount = minus(state.boosterCount, reward.amount); break;
+    case "rice": state.rice = minus(state.rice, reward.amount); break;
+    case "milestoneAuto": state.milestoneAutoBonus = minus(state.milestoneAutoBonus, reward.amount); break;
+    case "clickPermanent": state.permanentBonus.click = minus(state.permanentBonus.click, reward.amount); break;
+    case "autoPermanent": state.permanentBonus.auto = minus(state.permanentBonus.auto, reward.amount); break;
+    case "allPermanent": state.permanentBonus.all = minus(state.permanentBonus.all, reward.amount); break;
+    case "boosterDuration": state.permanentBoosterDurationSeconds = minus(state.permanentBoosterDurationSeconds, reward.amount); break;
+    case "unlockFlag": delete state.unlockFlags[reward.flag]; break;
+    default: break;
+  }
+}
+
+function setAdminLevel(targetLevel) {
+  if (!ADMIN_MODE_ENABLED) return false;
+  const target = GAME_LEVELS.find((entry) => entry.level === Number(targetLevel));
+  if (!target) return false;
+  if (target.level < state.level) {
+    for (let level = state.level; level > target.level; level -= 1) revertLevelReward(level);
+    for (const milestone of milestones) {
+      if (milestone.amount > target.requiredConsumed) revertMilestoneReward(milestone);
+    }
+    state.level = target.level;
+    state.festivalHeld = false; // 다시 LV.12에 오르면 축하 팝업이 한 번 더 뜨도록
+  }
+  state.consumed = target.requiredConsumed;
+  checkGameLevelUp(); // 올라갈 때는 일반 레벨업과 같게 보상·연출
+  checkMilestones();
+  render();
+  saveState(true);
+  showToast(`관리자: 게임 LV.${target.level} "${target.title}"(으)로 이동했어요.`);
+  return true;
+}
+
 function setupAdminMode() {
   if (!ADMIN_MODE_ENABLED) return;
   const trigger = document.querySelector("#adminModeTrigger");
@@ -2166,6 +2269,18 @@ function setupAdminMode() {
     event.preventDefault();
     if (addAdminRice(input.value, document.querySelector("#adminRiceUnit").value)) input.value = "";
   });
+  const levelSelect = document.querySelector("#adminLevelSelect");
+  for (const entry of GAME_LEVELS) {
+    const option = document.createElement("option");
+    option.value = String(entry.level);
+    option.textContent = `LV.${entry.level} ${entry.title} (${formatWeight(entry.requiredConsumed)})`;
+    levelSelect.append(option);
+  }
+  document.querySelector("#adminLevelForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    setAdminLevel(levelSelect.value);
+  });
+  trigger.addEventListener("click", () => { levelSelect.value = String(state.level); }); // 현재 LV를 기본 선택
   const close = () => { panel.hidden = true; trigger.focus({ preventScroll: true }); };
   document.querySelector("#closeAdminButton").addEventListener("click", close);
   panel.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
@@ -2190,11 +2305,8 @@ elements.harvestButton.addEventListener("click", (event) => {
   render();
 });
 
-elements.saveButton.addEventListener("click", () => {
-  saveState(false);
-  playGameSound("click");
-});
-elements.resetButton.addEventListener("click", resetGame);
+elements.resetButton.addEventListener("click", openResetDialog);
+if (elements.confirmResetButton) elements.confirmResetButton.addEventListener("click", confirmReset);
 elements.soundButton.addEventListener("click", () => {
   state.soundEnabled = !state.soundEnabled;
   renderStats();
@@ -2214,6 +2326,10 @@ if (elements.levelLabel) {
 // 다이얼로그 닫기(우측 상단 X, 축제 CTA 버튼 포함)는 index.html의 [data-close] 공통 핸들러가 처리합니다.
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("beforeunload", () => saveState(true));
+// 휴대폰은 앱 전환·홈 버튼 때 beforeunload가 오지 않을 수 있어, 화면이 가려질 때도 저장
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveState(true);
+});
 
 setInterval(() => saveState(true), 15000);
 

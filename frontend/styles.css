@@ -378,27 +378,28 @@ h2 {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 233, 89, 0.2), transparent 66%);
   filter: drop-shadow(0 22px 24px rgba(83, 70, 18, 0.28));
-  transition:
-    transform 140ms ease,
-    filter 140ms ease;
 }
 
-.ollie-button:hover {
-  filter: brightness(1.05);
-  transform: translateY(-2px);
-}
-
-.ollie-button:active,
-.ollie-button.harvest-pop {
-  transform: translateY(3px) scale(0.98);
-}
-
+/* 눌림/호버 효과는 올리 이미지에만 적용 — "수확하기" 라벨은 움직이지 않음 */
 .ollie-image {
   width: 100%;
   height: 100%;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease;
+}
+
+.ollie-button:hover .ollie-image {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+}
+
+.ollie-button:active .ollie-image,
+.ollie-button.harvest-pop .ollie-image {
+  transform: translateY(3px) scale(0.98);
 }
 
 .ollie-label {
@@ -1623,7 +1624,7 @@ body {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: center;
   width: 100%;
   height: calc(76.8px + env(safe-area-inset-bottom, 0px));
@@ -2887,5 +2888,290 @@ button {
   }
   .donation-badge-name {
     font-size: 11px;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 비료 사용: 올리 머리 위로 happy 이미지가 떠올랐다 사라짐 (game.js showHappyPop) */
+/* ---------------------------------------------------------------------- */
+.happy-pop {
+  position: absolute;
+  z-index: 5;
+  width: 84px;
+  height: 84px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  animation: happy-pop 1300ms ease-out forwards;
+}
+
+.happy-pop img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(70, 42, 4, 0.25));
+}
+
+.happy-pop .emoji-icon {
+  font-size: 60px;
+}
+
+@keyframes happy-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -80%) scale(0.5);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -110%) scale(1.1);
+  }
+  30% {
+    transform: translate(-50%, -110%) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -135%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -160%) scale(0.95);
+  }
+}
+
+@media (max-width: 600px) {
+  .happy-pop {
+    width: 64px;
+    height: 64px;
+  }
+  .happy-pop .emoji-icon {
+    font-size: 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .happy-pop {
+    animation: happy-fade 1300ms ease forwards;
+  }
+  @keyframes happy-fade {
+    0%, 100% { opacity: 0; }
+    20%, 75% { opacity: 1; }
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 휴대폰 글자 크기 한 단계 축소 (2026-09-29) — 600px 이하에서만           */
+/* 입력칸은 iOS 자동 확대 방지를 위해 16px 유지                            */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  body {
+    font-size: 14px; /* 크기를 따로 정하지 않은 글자(버튼·강조 등) 기본값 16 → 14 */
+  }
+
+  /* 제목 */
+  .section-title h2 {
+    font-size: 16px;
+  }
+  .section-title h2 img {
+    width: 24px;
+    height: 24px;
+  }
+  .quick-dialog h2,
+  .level-dialog h2 {
+    font-size: 17px;
+  }
+  .notice-post h3 {
+    font-size: 14px;
+  }
+  .notice-post-head {
+    font-size: 15px;
+  }
+  .notice-post ul {
+    font-size: 13px;
+  }
+
+  /* 홈 */
+  .hero-stats .stat-cell-value {
+    font-size: clamp(13px, 4vw, 18px);
+  }
+  .hero-stats .stat-cell-label {
+    font-size: 10px;
+  }
+  .booster-status-headline,
+  #boosterStatusLabel1,
+  .booster-status-label {
+    font-size: 10px;
+  }
+  .booster-status-value {
+    font-size: 11px;
+  }
+  .quick-menu-label {
+    font-size: 10.5px;
+  }
+  .ollie-label {
+    font-size: 14px;
+  }
+  .growth-card-title {
+    font-size: 15px;
+  }
+  .growth-progress-label {
+    font-size: 11px;
+  }
+  .growth-next-hint {
+    font-size: 10.5px;
+  }
+  .home-footer-panel .fertilizer-button {
+    font-size: 13px;
+  }
+  .toast {
+    font-size: 14px;
+  }
+
+  /* 카드 목록 */
+  .card-title {
+    font-size: 14px;
+  }
+  .card-meta,
+  .card-note {
+    font-size: 11px;
+  }
+  .card-cost {
+    font-size: 12px;
+  }
+  .tool-card-header,
+  .tool-card-header strong {
+    font-size: 14px;
+  }
+  .tool-card-header span,
+  .tool-card-stats {
+    font-size: 12px;
+  }
+  .qty-btn {
+    font-size: 12px;
+  }
+
+  /* 탭 화면 기타 */
+  .section-title > span,
+  .dialog-subtitle,
+  .milestone-hint,
+  .event-help,
+  .consume-summary,
+  .event-skip-btn {
+    font-size: 12px;
+  }
+  .stats-item span {
+    font-size: 12px;
+  }
+  .stats-item strong {
+    font-size: 16px;
+  }
+  .stage {
+    font-size: 10.5px;
+  }
+  .my-rank-line,
+  .my-friend-code,
+  .screen-placeholder {
+    font-size: 14px;
+  }
+  .storage-section-title,
+  .storage-recipe-name {
+    font-size: 12px;
+  }
+  .storage-level-num,
+  .storage-level-title {
+    font-size: 11px;
+  }
+  .storage-recipe-meta,
+  .storage-level-reward {
+    font-size: 10.5px;
+  }
+  .donation-badge-name {
+    font-size: 10.5px;
+  }
+  .donation-badge-goal {
+    font-size: 10px;
+  }
+
+  /* 입력칸은 16px 유지 (iOS에서 누를 때 화면 확대 방지) */
+  .friend-request-form input,
+  .admin-input-row input,
+  .admin-input-row select {
+    font-size: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 초기화 확인 팝업 / 관리자 레벨 이동                                      */
+/* ---------------------------------------------------------------------- */
+.confirm-dialog {
+  width: min(92vw, 420px);
+  height: fit-content; /* 모달 dialog는 위아래가 고정돼 auto면 화면 높이로 늘어나므로 내용 높이로 */
+  max-height: 90vh;
+  padding: 24px 22px 20px;
+}
+
+.confirm-message {
+  margin: 4px 0 8px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.confirm-message strong {
+  color: #c62828;
+}
+
+.confirm-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.confirm-actions button {
+  min-height: 46px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.confirm-cancel {
+  border: 1px solid var(--line);
+  background: var(--card-strong);
+  color: var(--text);
+}
+
+.confirm-danger {
+  background: #d92626;
+  color: #fff;
+  box-shadow: 0 3px 0 #9e1b1b;
+}
+
+.confirm-danger:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #9e1b1b;
+}
+
+.admin-level-form {
+  margin-top: 10px;
+}
+
+.admin-level-form select {
+  flex: 1;
+}
+
+@media (max-width: 600px) {
+  .confirm-dialog {
+    width: 100%;
+  }
+  .confirm-message {
+    font-size: 14px;
+  }
+  .confirm-note {
+    font-size: 12px;
   }
 }
