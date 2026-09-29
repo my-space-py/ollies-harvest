@@ -126,3 +126,21 @@ body {
 @media (min-width: 480px) {
   .auth-card { padding: 2.5rem 2rem; }
 }
+
+/* 로그인 화면: 게임과 같은 논밭 배경 + 모바일 안전 영역 */
+body {
+  background:
+    linear-gradient(rgba(248, 230, 183, 0.35), rgba(248, 230, 183, 0.75)),
+    url("../assets/images/backgrounds/farm_main.png") center / cover no-repeat,
+    #f8e6b7;
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+}
+
+.auth-card {
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.auth-form input {
+  font-size: 16px; /* iOS 입력 시 자동 확대 방지 */
+}

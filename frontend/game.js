@@ -59,6 +59,10 @@ const initialState = {
     claimedDays: {}, // { "1": true, ... } 이미 받은 날짜별 보상
   },
 
+  // 랜덤 이벤트 (퀵메뉴 '이벤트')
+  // status: none | ready(시작 전) | active(진행 중) | complete(보상 대기) | failed(시간 초과) | claimed(쿨다운)
+  event: { id: "", status: "none", progress: 0, startedAt: 0, nextAt: 0 },
+
   backgroundStage: 1,
 
   soundEnabled: true,
@@ -100,6 +104,8 @@ const elements = {
   missionList: document.querySelector("#missionList"),
   missionDialogList: document.querySelector("#missionDialogList"),
   attendanceList: document.querySelector("#attendanceList"),
+  eventList: document.querySelector("#eventList"),
+  eventSkipButton: document.querySelector("#eventSkipButton"),
   milestoneList: document.querySelector("#milestoneList"),
   statsSummary: document.querySelector("#statsSummary"),
   statsUpgradeList: document.querySelector("#statsUpgradeList"),
@@ -174,6 +180,7 @@ function normalizeState(saved) {
       ...saved.attendance,
       claimedDays: { ...initialState.attendance.claimedDays, ...(saved.attendance && saved.attendance.claimedDays) },
     },
+    event: { ...initialState.event, ...saved.event },
   };
 
   // 구버전 인기도는 해금 이력으로만 이관하고 폐기합니다. 새 성장 재화는 없습니다.
@@ -380,6 +387,11 @@ async function respondToFriendRequest(requestId, accept) {
     });
     const payload = await res.json();
     showToast(res.ok ? payload.message : payload.detail || "요청 처리에 실패했습니다.");
+    if (res.ok && accept) {
+      advanceEvent("friend");
+      render();
+      saveState(true);
+    }
     loadFriendsScreen();
   } catch {
     showToast("서버에 연결할 수 없습니다.");
@@ -436,6 +448,9 @@ if (elements.friendRequestForm) {
       elements.friendRequestMessage.textContent = res.ok ? payload.message : payload.detail || "친구 요청에 실패했습니다.";
       if (res.ok) {
         elements.friendCodeInput.value = "";
+        advanceEvent("friend");
+        render();
+        saveState(true);
         loadFriendsScreen();
       }
     } catch {
@@ -487,6 +502,7 @@ function buyInnerUpgrade(kind) {
   const label = kind === "click" ? "수동 수확 장비" : "자동 수확 설비";
   showToast(`${label} 강화 완료 (Lv.${tool.level})`);
   state.dailyProgress.upgrade = (state.dailyProgress.upgrade || 0) + 1;
+  advanceEvent("upgrade");
   render();
   saveState(true);
 }
@@ -505,6 +521,7 @@ function buyNextTier(kind) {
   playGameSound("level");
   showToast(`${names[tool.tier - 1]}(으)로 장비를 교체했어요!`);
   state.dailyProgress.upgrade = (state.dailyProgress.upgrade || 0) + 1;
+  advanceEvent("upgrade");
   render();
   saveState(true);
 }
@@ -679,6 +696,7 @@ function useBooster() {
   playGameSound("upgrade");
   showToast(`비료 부스터 사용! 전체 수확량 ${getBoosterMultiplier().toFixed(1)}배`);
   state.dailyProgress.boosterUse = (state.dailyProgress.boosterUse || 0) + 1;
+  advanceEvent("boosterUse");
   render();
   saveState(true);
 }
@@ -734,6 +752,7 @@ function useRecipe(recipe) {
   }
   showToast(qty > 1 ? `${recipe.name} ×${qty} — ${recipe.message}` : recipe.message);
   state.dailyProgress.recipe = (state.dailyProgress.recipe || 0) + 1; // "레시피 N회 사용" = 사용 액션 횟수 기준(수량 아님)
+  advanceEvent("recipe");
 
   checkGameLevelUp();
   checkMilestones();
@@ -794,6 +813,145 @@ function claimAttendanceReward(day) {
   showToast(`${day}일차 출석 보상: ${reward.label}`);
   render();
   saveState(true);
+}
+
+// ----------------------------------------------------------------------------
+// 랜덤 이벤트 (퀵메뉴 '이벤트') — balance-config.js의 RANDOM_EVENTS / EVENT_CONFIG
+// ----------------------------------------------------------------------------
+function getEventDef(id) {
+  return RANDOM_EVENTS.find((entry) => entry.id === id) || null;
+}
+
+function pickRandomEvent(excludeId = "") {
+  const pool = RANDOM_EVENTS.filter((entry) => entry.id !== excludeId);
+  const def = pool[Math.floor(Math.random() * pool.length)];
+  state.event = { id: def.id, status: "ready", progress: 0, startedAt: 0, nextAt: 0 };
+}
+
+function isEventTimedOut(def, now = Date.now()) {
+  return Boolean(def.timeLimitSeconds) && now - state.event.startedAt > def.timeLimitSeconds * 1000;
+}
+
+// 게임 루프에서 주기적으로 호출: 첫 이벤트 배정, 시간 초과 판정, 쿨다운이 끝나면 새 이벤트
+function checkEventState(now = Date.now()) {
+  const ev = state.event;
+  const def = getEventDef(ev.id);
+  if (!def || ev.status === "none") {
+    pickRandomEvent();
+  } else if (ev.status === "claimed" && now >= ev.nextAt) {
+    pickRandomEvent(ev.id);
+  } else if (ev.status === "active" && isEventTimedOut(def, now)) {
+    ev.status = "failed";
+  }
+}
+
+// 받는 순간 보유 쌀알이 rewardMultiplier배가 되도록 차액을 지급 (최소 minRewardRice)
+function getEventReward(targetState = state) {
+  const bonus = Math.floor(targetState.rice * (EVENT_CONFIG.rewardMultiplier - 1));
+  return Math.max(EVENT_CONFIG.minRewardRice, bonus);
+}
+
+function startEvent() {
+  const ev = state.event;
+  const def = getEventDef(ev.id);
+  if (!def || (ev.status !== "ready" && ev.status !== "failed")) return;
+  ev.status = "active";
+  ev.progress = 0;
+  ev.startedAt = Date.now();
+  showToast(`이벤트 시작! ${def.description}`);
+  render();
+  saveState(true);
+}
+
+function advanceEvent(type, amount = 1) {
+  const ev = state.event;
+  const def = getEventDef(ev.id);
+  if (!def || ev.status !== "active" || def.type !== type) return;
+  if (isEventTimedOut(def)) {
+    ev.status = "failed";
+    return;
+  }
+  ev.progress = Math.min(def.target, ev.progress + amount);
+  if (ev.progress >= def.target) {
+    ev.status = "complete";
+    showToast(`이벤트 "${def.name}" 달성! 이벤트 창에서 보상을 받으세요.`);
+  }
+}
+
+function claimEventReward() {
+  const ev = state.event;
+  if (ev.status !== "complete") return;
+  const reward = getEventReward();
+  gainRice(reward);
+  ev.status = "claimed";
+  ev.nextAt = Date.now() + EVENT_CONFIG.cooldownSeconds * 1000;
+  showOllieReaction("./assets/images/characters/ollie_happy.png", 1200);
+  showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
+  playGameSound("festival");
+  showToast(`이벤트 보상: 쌀알 +${formatWeight(reward)}`);
+  render();
+  saveState(true);
+}
+
+function skipEvent() {
+  const ev = state.event;
+  if (ev.status !== "ready" && ev.status !== "failed") return;
+  pickRandomEvent(ev.id);
+  render();
+  saveState(true);
+}
+
+// 카드 전체가 버튼: 상태에 따라 시작 / 다시 도전 / 보상 받기
+function handleEventCardClick() {
+  if (state.event.status === "complete") claimEventReward();
+  else startEvent();
+}
+
+function getEventView() {
+  const ev = state.event;
+  const def = getEventDef(ev.id);
+  const rewardText = `보상: 보유 쌀알 ×${EVENT_CONFIG.rewardMultiplier}`;
+  const card = (icon, title, meta, note, cost, disabled, extraClass = "") => ({
+    className: `game-card event-card${extraClass}`,
+    disabled,
+    html: `
+      <span class="card-icon">${icon}</span>
+      <span>
+        <span class="card-title">${title}</span>
+        <span class="card-meta">${meta}</span>
+        <span class="card-note">${note}</span>
+      </span>
+      <span class="card-cost">${cost}</span>
+    `,
+  });
+
+  if (!def) return card("⏳", "이벤트 준비 중", "잠시 후 새 이벤트가 열려요", "", "대기", true);
+  switch (ev.status) {
+    case "active": {
+      const timeLeft = def.timeLimitSeconds
+        ? ` · 남은 시간 ${formatDuration(def.timeLimitSeconds - (Date.now() - ev.startedAt) / 1000)}`
+        : "";
+      return card("🔥", def.name, `${def.description} (${ev.progress}/${def.target})${timeLeft}`, rewardText, "진행 중", true, " is-active");
+    }
+    case "complete":
+      return card("🎁", `${def.name} 달성!`, "눌러서 보상을 받으세요", `보유 쌀알 ×${EVENT_CONFIG.rewardMultiplier} · +${formatWeight(getEventReward())}`, "받기", false, " is-complete");
+    case "failed":
+      return card("⌛", def.name, `시간 초과 (${ev.progress}/${def.target}) — 눌러서 다시 도전`, rewardText, "다시 도전", false);
+    case "claimed":
+      return card("✔", "이벤트 완료", `${formatDuration((ev.nextAt - Date.now()) / 1000)} 후 새 이벤트가 열려요`, "", "대기", true, " claimed");
+    default:
+      return card("🎯", def.name, def.description, rewardText, "시작", false);
+  }
+}
+
+function renderEvent() {
+  if (elements.eventList) {
+    renderStableButtonList(elements.eventList, [state.event], getEventView, handleEventCardClick);
+  }
+  const status = state.event.status;
+  if (elements.eventSkipButton) elements.eventSkipButton.hidden = status !== "ready" && status !== "failed";
+  const quickBtn = document.querySelector('.quick-menu-btn[data-quick="event"]');
+  if (quickBtn) quickBtn.classList.toggle("has-badge", status === "ready" || status === "complete");
 }
 
 function claimDailyMission(mission) {
@@ -962,7 +1120,8 @@ function renderStats() {
   elements.tapValue.textContent = `+${formatWeight(getTapPower())}`;
 
   const levelInfo = getGameLevelInfo(state.level);
-  elements.levelLabel.innerHTML = `LV.${state.level}<br />${levelInfo.title}`;
+  // 줄바꿈 앞 공백: 모바일에서 <br>을 숨겨 "LV.3 성실한 농부" 한 줄로 보여줄 때 사용
+  elements.levelLabel.innerHTML = `LV.${state.level} <br />${levelInfo.title}`;
   const nextLevel = getNextGameLevel(state.level);
   if (nextLevel) {
     const span = nextLevel.requiredConsumed - levelInfo.requiredConsumed;
@@ -992,9 +1151,29 @@ function renderStats() {
   renderGrowthCard();
 }
 
+// 오늘의 문구: 접속할 때마다 무작위로 정하고, 접속해 있는 동안은 고정한다.
+// 직전 접속 문구를 기억해 두었다가 같은 문구가 연달아 나오지 않게 한다.
+const LAST_PHRASE_KEY = "ollies-harvest-last-phrase";
+const sessionPhrase = (() => {
+  let lastIndex = -1;
+  try {
+    const saved = localStorage.getItem(LAST_PHRASE_KEY);
+    if (saved !== null) lastIndex = Number(saved);
+  } catch {
+    // 저장소를 쓸 수 없으면 제외 없이 무작위
+  }
+  const index = pickRandomPhraseIndex(lastIndex);
+  try {
+    localStorage.setItem(LAST_PHRASE_KEY, String(index));
+  } catch {
+    // 무시
+  }
+  return DAILY_PHRASES[index];
+})();
+
 function renderDailyPhrase() {
   if (!elements.dailyPhraseText) return;
-  const phrase = getDailyPhrase();
+  const phrase = sessionPhrase;
   if (elements.dailyPhraseText.textContent !== phrase) {
     elements.dailyPhraseText.textContent = phrase;
     fitDailyPhrase();
@@ -1441,6 +1620,7 @@ function render() {
   renderRecipes();
   renderMissions();
   renderAttendance();
+  renderEvent();
   renderMilestones();
   renderStatsSummary();
   renderStatsUpgrades();
@@ -1526,6 +1706,7 @@ elements.harvestButton.addEventListener("click", (event) => {
   const amount = getTapPower();
   gainRice(amount);
   state.dailyProgress.click = (state.dailyProgress.click || 0) + 1;
+  advanceEvent("click");
   const rect = elements.harvestButton.getBoundingClientRect();
   const layerRect = elements.floatLayer.getBoundingClientRect();
   showFloat(amount, rect.left - layerRect.left + rect.width / 2, rect.top - layerRect.top + rect.height / 2);
@@ -1572,6 +1753,7 @@ function gameLoop(now) {
   renderStats();
   if (now - lastFullRender > 300) {
     checkDailyAndWeeklyReset();
+    checkEventState();
     checkMilestones();
     render();
     lastFullRender = now;
@@ -1587,6 +1769,8 @@ resizeCanvas();
 checkGameLevelUp();
 checkMilestones();
 checkDailyAndWeeklyReset();
+checkEventState();
+if (elements.eventSkipButton) elements.eventSkipButton.addEventListener("click", skipEvent);
 render();
 syncFromServer();
 requestAnimationFrame(gameLoop);

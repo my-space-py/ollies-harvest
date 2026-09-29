@@ -372,3 +372,26 @@ test('event skip only works before starting or after failing; old saves without 
     state = normalizeState(legacy); assert.equal(state.event.status, 'none');
     checkEventState(); assert.equal(state.event.status, 'ready');`);
 });
+
+test('daily phrase is random per visit, never repeats the previous visit, and stays fixed during a visit', () => {
+  createGame().run(`
+    for (let exclude = 0; exclude < DAILY_PHRASES.length; exclude++) {
+      for (let i = 0; i < 40; i++) {
+        const index = pickRandomPhraseIndex(exclude);
+        assert.ok(index >= 0 && index < DAILY_PHRASES.length);
+        assert.notEqual(index, exclude);
+      }
+    }
+    const seen = new Set(); for (let i = 0; i < 2000; i++) seen.add(pickRandomPhraseIndex(-1));
+    assert.equal(seen.size, DAILY_PHRASES.length); // 제외 없을 때 모든 문구가 나올 수 있음
+    assert.ok(Number.isInteger(pickRandomPhraseIndex(NaN)));
+    assert.equal(localStorage.getItem('ollies-harvest-last-phrase'), String(DAILY_PHRASES.indexOf(sessionPhrase)));
+  `);
+  // 한 번 접속한 동안에는 반복 렌더링(300ms 주기)에도 문구가 바뀌지 않아야 함
+  for (let i = 0; i < 20; i++) {
+    const g = createGame();
+    const first = g.run('sessionPhrase');
+    g.run(`renderDailyPhrase(); renderDailyPhrase();`);
+    assert.equal(g.node('#dailyPhraseText').textContent, first);
+  }
+});

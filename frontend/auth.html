@@ -2,9 +2,18 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- 홈 화면에 추가(웹앱) 설정: 주소창 없이 앱처럼 실행 -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#fff6d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="올리의 수확" />
+  <link rel="apple-touch-icon" href="./assets/images/icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="./assets/images/icons/app-icon-192.png" />
   <title>로그인 / 회원가입</title>
-  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/auth.css?v=2">
 </head>
 <body>
   <main class="auth-container">

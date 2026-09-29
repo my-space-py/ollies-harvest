@@ -1,0 +1,17 @@
+{
+  "name": "올리의 수확",
+  "short_name": "올리의 수확",
+  "description": "쌀을 수확하고 맛있게 소비하며 성장하는 방치형 게임",
+  "lang": "ko",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8e6b7",
+  "theme_color": "#fff6d8",
+  "icons": [
+    { "src": "./assets/images/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/images/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/images/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

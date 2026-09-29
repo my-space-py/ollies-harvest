@@ -2,14 +2,23 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- 홈 화면에 추가(웹앱) 설정: 주소창 없이 앱처럼 실행 -->
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#fff6d8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="올리의 수확" />
+    <link rel="apple-touch-icon" href="./assets/images/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="./assets/images/icons/app-icon-192.png" />
     <title>올리의 수확</title>
     <script>
       if (!localStorage.getItem("currentUser")) {
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=38" />
+    <link rel="stylesheet" href="./styles.css?v=45" />
   </head>
   <body>
     <!-- 화면 뷰포트: 하단 네비게이션 위 영역. 6개 화면 중 하나만 보이고, 각 화면은 자기 안에서만 스크롤됨 (js/router.js) -->
@@ -376,13 +385,90 @@
     <dialog id="eventDialog" class="quick-dialog">
       <button type="button" class="modal-close-btn" data-close="eventDialog" aria-label="닫기">×</button>
       <h2>이벤트</h2>
-      <p class="quick-dialog-body">준비 중입니다.</p>
+      <p class="dialog-subtitle">바로 할 수 있는 깜짝 과제 · 달성하면 보유 쌀알이 1.5배!</p>
+      <div class="modal-scroll-body">
+        <!-- 이벤트 카드 1장 (game.js renderEvent). 카드 전체를 눌러 시작 / 다시 도전 / 보상 받기 -->
+        <div id="eventList" class="card-list"></div>
+        <button id="eventSkipButton" type="button" class="event-skip-btn" hidden>다른 이벤트로 바꾸기</button>
+        <p class="event-help">
+          카드를 눌러 이벤트를 시작하세요. 시간 제한이 있는 이벤트는 시작한 순간부터 시간이 흘러요.
+          보상은 <strong>받는 순간의 보유 쌀알</strong> 기준이라, 쌀알을 모아 두었다가 받으면 더 많이 받아요.
+          보상을 받으면 3분 뒤 새 이벤트가 열립니다.
+        </p>
+      </div>
     </dialog>
 
     <dialog id="noticeDialog" class="quick-dialog">
       <button type="button" class="modal-close-btn" data-close="noticeDialog" aria-label="닫기">×</button>
       <h2>공지</h2>
-      <p class="quick-dialog-body">준비 중입니다.</p>
+      <p class="dialog-subtitle">올리의 수확 사용법</p>
+      <div class="modal-scroll-body">
+        <article class="notice-post">
+          <header class="notice-post-head">
+            <span class="notice-tag">필독</span>
+            <strong>처음 오셨나요? 올리의 수확 한눈에 보기</strong>
+          </header>
+
+          <section>
+            <h3>🌾 1. 쌀 모으기</h3>
+            <ul>
+              <li>가운데 <b>올리를 클릭</b>하면 쌀알을 수확해요. (1쌀알 = 실제 쌀 1g)</li>
+              <li>가만히 있어도 <b>초당 수확량</b>만큼 자동으로 쌓여요. 게임을 꺼 둔 동안에도 최대 24시간까지 모아 둬요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>⬆ 2. 장비 강화 (업그레이드 탭)</h3>
+            <ul>
+              <li><b>내부 강화</b>: 쌀알로 지금 장비를 한 단계씩 강화해요.</li>
+              <li><b>다음 티어</b>: 게임 LV이 오르면 더 좋은 장비로 바꿀 수 있어요. 수확량이 크게 늘어나요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>🍚 3. 쌀 소비하기 = 성장하기 (업그레이드 탭 아래 레시피)</h3>
+            <ul>
+              <li>이 게임의 핵심은 <b>쌀을 소비</b>하는 거예요. 레시피를 만들면 <b>누적 쌀 소비량</b>이 올라가고, 소비량에 따라 <b>게임 LV</b>이 올라가요.</li>
+              <li>밥 → 다음 비료 시간 증가 · 김밥 → 클릭 수확 ×3 · 떡 → 자동 수확 ×3 · 쌀빵 → 다음 비료 배율 증가 · 누룽지 → 전체 수확 ×2</li>
+              <li>×1 / ×10 / ×100 / MAX로 한 번에 여러 개 만들 수 있어요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>🌱 4. 비료 부스터</h3>
+            <ul>
+              <li>하단 <b>비료 사용</b> 버튼을 누르면 일정 시간 전체 수확량이 2배가 돼요.</li>
+              <li>비료는 LV업, 오늘의 미션, 출석, 소비 마일스톤 보상으로 얻어요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>🎁 5. 보상 챙기기</h3>
+            <ul>
+              <li><b>오늘의 미션</b>: 매일 자정에 초기화되는 4가지 과제</li>
+              <li><b>출석</b>: 접속한 날마다 한 칸씩, 7일 동안 보상</li>
+              <li><b>이벤트</b>: 바로 할 수 있는 깜짝 과제. 달성하면 보유 쌀알이 1.5배!</li>
+              <li><b>통계 탭</b>의 소비 마일스톤도 소비량을 채우면 자동으로 보상이 지급돼요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>🏆 6. 친구와 랭킹</h3>
+            <ul>
+              <li><b>친구 탭</b>에서 내 친구 코드를 알려주거나, 친구 코드를 입력해 친구를 맺어요.</li>
+              <li><b>랭킹 탭</b>은 이번 주(월요일 시작) 누적 수확량 순위예요.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>💾 7. 저장</h3>
+            <ul>
+              <li>진행 상황은 자동으로 저장되고 계정에 연결돼요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</li>
+              <li>우측 상단 <b>초기화</b>는 모든 진행이 지워지니 조심하세요!</li>
+            </ul>
+          </section>
+        </article>
+      </div>
     </dialog>
 
     <dialog id="dailyDialog" class="quick-dialog">
@@ -405,8 +491,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./js/balance-config.js?v=5"></script>
-    <script src="./game.js?v=22"></script>
+    <script src="./js/balance-config.js?v=7"></script>
+    <script src="./game.js?v=25"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -424,7 +510,15 @@
         attendance: "attendanceDialog",
       };
 
+      // 휴대폰 폭(600px 이하)에서는 팝업/바로가기 크기를 CSS(모바일 섹션)가 정한다
+      const isPhoneLayout = () => window.matchMedia("(max-width: 600px)").matches;
+
       function sizeQuickDialog(dialog, quickKey) {
+        if (isPhoneLayout()) {
+          dialog.style.width = "";
+          dialog.style.height = "";
+          return;
+        }
         const btn = document.querySelector(`.quick-menu-btn[data-quick="${quickKey}"]`);
         const footerPanel = document.querySelector(".home-footer-panel");
         if (!btn || !footerPanel) return; // 측정 불가 시 CSS 기본값(근사치) 사용
@@ -464,6 +558,13 @@
         const buttons = document.querySelectorAll(".quick-menu-btn");
         if (!heroStats || buttons.length === 0) return;
 
+        if (isPhoneLayout()) {
+          buttons.forEach((btn) => {
+            btn.style.width = "";
+            btn.style.height = "";
+          });
+          return;
+        }
         const height = Math.round(heroStats.getBoundingClientRect().height);
         buttons.forEach((btn) => {
           btn.style.width = `${height}px`;

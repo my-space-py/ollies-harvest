@@ -218,7 +218,29 @@ const ATTENDANCE_REWARDS = [
 ];
 
 // ----------------------------------------------------------------------------
-// 10. 홈 화면 매일 랜덤 문구 (날짜 기준 고정 — 같은 날엔 항상 같은 문구가 나오고, 자정이 지나면 바뀜)
+// 9-1. 랜덤 이벤트 (퀵메뉴 '이벤트') — 바로 할 수 있는 짧은 과제 1개가 무작위로 제시됨
+// ----------------------------------------------------------------------------
+// 흐름: 대기(시작 버튼) → 진행 중 → 달성(보상 받기) → 쿨다운 후 다음 이벤트 무작위 등장
+// type: 진행도를 올리는 행동 ('click' | 'friend' | 'boosterUse' | 'recipe' | 'upgrade')
+// timeLimitSeconds: 시작 후 제한 시간(초). 없으면 시간 제한 없음. 시간 초과 시 '다시 도전' 가능
+// 보상: 받는 순간 보유 쌀알이 rewardMultiplier배가 됨 (최소 minRewardRice 보장)
+const EVENT_CONFIG = {
+  rewardMultiplier: 1.5,
+  minRewardRice: 100,
+  cooldownSeconds: 180, // 보상 수령 후 다음 이벤트가 나올 때까지
+};
+
+const RANDOM_EVENTS = [
+  { id: "clickRush", name: "번개 수확", description: "1분 안에 올리를 20번 클릭하기", type: "click", target: 20, timeLimitSeconds: 60 },
+  { id: "clickStorm", name: "폭풍 수확", description: "30초 안에 올리를 15번 클릭하기", type: "click", target: 15, timeLimitSeconds: 30 },
+  { id: "makeFriend", name: "함께 짓는 농사", description: "친구 요청 보내기 또는 받은 요청 수락하기", type: "friend", target: 1 },
+  { id: "useFertilizer", name: "비료 뿌리는 날", description: "비료 부스터 1번 사용하기", type: "boosterUse", target: 1 },
+  { id: "cookTwice", name: "오늘은 내가 요리사", description: "레시피 2번 사용하기", type: "recipe", target: 2 },
+  { id: "toolCare", name: "장비 손질", description: "수확 장비 1번 강화하기", type: "upgrade", target: 1 },
+];
+
+// ----------------------------------------------------------------------------
+// 10. 홈 화면 '오늘의 문구' — 접속(페이지 로드)할 때마다 무작위 1개 (직전 접속 문구는 제외)
 // ----------------------------------------------------------------------------
 const DAILY_PHRASES = [
   "오늘 아침밥, 우리쌀로 시작하세요",
@@ -273,18 +295,15 @@ const DAILY_PHRASES = [
   "오늘도 우리쌀로 맛있는 하루 만들어요",
 ];
 
-function hashStringToInt(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return hash;
+// excludeIndex(직전에 보여준 문구)를 뺀 나머지 중에서 균등하게 하나를 고른다.
+function pickRandomPhraseIndex(excludeIndex = -1) {
+  if (DAILY_PHRASES.length <= 1) return 0;
+  const hasExclude = Number.isInteger(excludeIndex) && excludeIndex >= 0 && excludeIndex < DAILY_PHRASES.length;
+  let index = Math.floor(Math.random() * (DAILY_PHRASES.length - (hasExclude ? 1 : 0)));
+  if (hasExclude && index >= excludeIndex) index += 1;
+  return index;
 }
 
-function getDailyPhrase(dateKey = getLocalDateKey()) {
-  const index = hashStringToInt(dateKey) % DAILY_PHRASES.length;
-  return DAILY_PHRASES[index];
-}
 function getGameLevelInfo(level) {
   return GAME_LEVELS.find((entry) => entry.level === level) || GAME_LEVELS[0];
 }
