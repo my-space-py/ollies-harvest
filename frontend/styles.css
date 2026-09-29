@@ -1623,7 +1623,7 @@ body {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: center;
   width: 100%;
   height: calc(76.8px + env(safe-area-inset-bottom, 0px));
@@ -2755,5 +2755,137 @@ button {
   .quick-dialog[open],
   .level-dialog[open] {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 쌀 소비 탭: 레시피 · 잔치 · 쌀 기부 · 주문 배달                           */
+/* ---------------------------------------------------------------------- */
+
+/* 이미지 파일이 아직 없을 때 대신 보이는 이모지 (game.js iconHtml / markMissingImage) */
+.emoji-icon {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.storage-recipe-icon .emoji-icon {
+  font-size: 22px;
+}
+
+.section-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.game-card.locked .card-icon {
+  font-size: 18px;
+}
+
+.feast-card.is-open:not(:disabled) {
+  border-color: rgba(244, 165, 28, 0.6);
+  background: #fff4d2;
+}
+
+.feast-card.is-done .card-cost {
+  background: rgba(146, 207, 72, 0.3);
+  color: var(--leaf-dark);
+}
+
+.consume-summary {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 246, 201, 0.9);
+  color: var(--brown);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.donation-badge-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.donation-badge {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
+  text-align: center;
+  cursor: default;
+}
+
+.donation-badge:disabled {
+  opacity: 0.6; /* 버튼 기본 비활성 표시보다 조금 밝게 (배지는 누르는 버튼이 아님) */
+}
+
+.donation-badge.is-earned {
+  border-color: rgba(244, 165, 28, 0.6);
+  background: #fff4d2;
+  color: var(--brown);
+  opacity: 1;
+}
+
+.donation-badge-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 24px;
+}
+
+.donation-badge-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.donation-badge-name {
+  font-size: 12px;
+  font-weight: 900;
+  word-break: keep-all;
+}
+
+.donation-badge-goal {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* 휴대폰: 하단 탭 7개가 들어가도록 긴 라벨은 짧은 이름(data-short)으로 */
+@media (max-width: 600px) {
+  .bottom-nav .nav-btn-label {
+    font-size: clamp(10px, 2.8vw, 12px);
+  }
+  /* 긴 라벨은 원래 글자를 숨기고 짧은 이름만 표시 (위 규칙보다 구체적이어야 함) */
+  .bottom-nav .nav-btn-label[data-short] {
+    font-size: 0;
+  }
+  .bottom-nav .nav-btn-label[data-short]::after {
+    content: attr(data-short);
+    font-size: clamp(10px, 2.8vw, 12px);
+  }
+  .bottom-nav .nav-btn {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+  .bottom-nav .nav-btn-icon {
+    width: 24px;
+    height: 24px;
+  }
+  .donation-badge-list {
+    gap: 6px;
+  }
+  .donation-badge-name {
+    font-size: 11px;
   }
 }

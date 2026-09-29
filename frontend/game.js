@@ -7,7 +7,9 @@ const STORAGE_KEY = "ollies-harvest-save-v2";
 // 자세한 배포 구성은 GCP.md 참고.
 const API_BASE_URL =
   typeof location !== "undefined" && location.port === "4174" ? "http://127.0.0.1:8000" : "";
+// 게임 LV별 올리 기본 이미지: ollie_1.png ~ ollie_12.png. 파일이 없으면 OLLIE_HARVEST_IMAGE로 대신 표시
 const OLLIE_HARVEST_IMAGE = "./assets/images/characters/ollie_harvest.png";
+const OLLIE_LEVEL_IMAGE_DIR = "./assets/images/characters";
 
 // ----------------------------------------------------------------------------
 // 소비량 보상 트랙(통계 화면 전용). 게임 LV 기준/보상과 별개로 유지합니다.
@@ -40,12 +42,23 @@ const initialState = {
   activeBoosterRecipeBonus: 0, // 현재 부스터의 레시피 가산 배율(중첩하지 않음)
   boosterEndTime: 0,
 
+  // 신규 레시피 효과
+  offlineBonus: 0, // 식혜: 오프라인 수확 효율 영구 보너스 (최대 OFFLINE_BONUS_MAX)
+  levelRewardDoubleCharges: 0, // 떡국: 다음 게임 LV 보상 2배 적립 횟수
+
+  // 쌀 소비 탭: 잔치 / 쌀 기부 / 주문 배달
+  feastsDone: {}, // { neighborhood: true, ... }
+  donated: 0, // 누적 기부량(g)
+  donationBadges: {}, // { d1: true, ... } 받은 기부 배지
+  // status: none | offered(납품 대기) | cooldown(다음 주문 대기)
+  order: { status: "none", recipeId: "", qty: 0, customer: "", reward: 0, booster: 0, expiresAt: 0, nextAt: 0 },
+
   recipeUses: Object.fromEntries(RECIPES.map((recipe) => [recipe.id, 0])),
   claimedMilestones: Object.fromEntries(milestones.map((milestone) => [milestone.id, false])),
 
   // 오늘의 미션 (일일 리셋)
   dailyDateKey: getLocalDateKey(),
-  dailyProgress: { click: 0, upgrade: 0, recipe: 0, boosterUse: 0 },
+  dailyProgress: { click: 0, upgrade: 0, recipe: 0, boosterUse: 0, noodleBooster: 0 },
   dailyClaimed: Object.fromEntries(DAILY_MISSIONS.map((mission) => [mission.id, false])),
 
   // 주간 랭킹
@@ -77,6 +90,8 @@ const initialState = {
     autoMultiplier: 1,
     allUntil: 0,
     allMultiplier: 1,
+    critUntil: 0, // 주먹밥: 클릭 대박 확률 버프
+    critMultiplier: 1,
   },
 };
 
@@ -101,6 +116,13 @@ const elements = {
   recipeCount: document.querySelector("#recipeCount"),
   recipeList: document.querySelector("#recipeList"),
   recipeQtyButtons: document.querySelector("#recipeQtyButtons"),
+  feastList: document.querySelector("#feastList"),
+  donationSummary: document.querySelector("#donationSummary"),
+  donationRatioButtons: document.querySelector("#donationRatioButtons"),
+  donateButtonWrap: document.querySelector("#donateButtonWrap"),
+  donationBadgeList: document.querySelector("#donationBadgeList"),
+  orderList: document.querySelector("#orderList"),
+  orderSkipButton: document.querySelector("#orderSkipButton"),
   missionList: document.querySelector("#missionList"),
   missionDialogList: document.querySelector("#missionDialogList"),
   attendanceList: document.querySelector("#attendanceList"),
@@ -181,6 +203,9 @@ function normalizeState(saved) {
       claimedDays: { ...initialState.attendance.claimedDays, ...(saved.attendance && saved.attendance.claimedDays) },
     },
     event: { ...initialState.event, ...saved.event },
+    feastsDone: { ...initialState.feastsDone, ...saved.feastsDone },
+    donationBadges: { ...initialState.donationBadges, ...saved.donationBadges },
+    order: { ...initialState.order, ...saved.order },
   };
 
   // 구버전 인기도는 해금 이력으로만 이관하고 폐기합니다. 새 성장 재화는 없습니다.
@@ -218,7 +243,7 @@ function normalizeState(saved) {
   const elapsed = Math.max(0, (Date.now() - (saved.lastSavedAt || Date.now())) / 1000);
   const offlineSeconds = Math.min(elapsed, OFFLINE_MAX_SECONDS);
   const offlinePerSecond = getPerSecond(merged, { ignoreTimedBuffs: true });
-  const offlineGain = offlinePerSecond * offlineSeconds;
+  const offlineGain = offlinePerSecond * offlineSeconds * (1 + (merged.offlineBonus || 0)); // 식혜 보너스
   if (offlineGain >= 1) {
     merged.rice += offlineGain;
     merged.totalHarvested += offlineGain;
@@ -680,22 +705,26 @@ function claimLevelReward(level) {
   state.claimedLevelRewards[level] = true;
   const info = getGameLevelInfo(level);
   const reward = info.reward;
+  // 떡국 적립이 있으면 수치형 보상(부스터·영구 %)을 2배로 받고 적립 1회 사용
+  const doubled = typeof reward.amount === "number" && state.levelRewardDoubleCharges > 0;
+  if (doubled) state.levelRewardDoubleCharges -= 1;
+  const amount = doubled ? reward.amount * 2 : reward.amount;
 
   switch (reward.type) {
     case "booster":
-      state.boosterCount += reward.amount;
+      state.boosterCount += amount;
       break;
     case "clickPermanent":
-      state.permanentBonus.click += reward.amount;
+      state.permanentBonus.click += amount;
       break;
     case "autoPermanent":
-      state.permanentBonus.auto += reward.amount;
+      state.permanentBonus.auto += amount;
       break;
     case "allPermanent":
-      state.permanentBonus.all += reward.amount;
+      state.permanentBonus.all += amount;
       break;
     case "boosterMultiplierBonus":
-      state.boosterMultiplierBonus += reward.amount;
+      state.boosterMultiplierBonus += amount;
       break;
     case "unlockFlag":
       state.unlockFlags[reward.flag] = true;
@@ -704,7 +733,7 @@ function claimLevelReward(level) {
       break;
   }
 
-  showToast(`게임 LV.${level} 달성! "${info.title}"`);
+  showToast(`게임 LV.${level} 달성! "${info.title}"${doubled ? " — 떡국 효과로 보상 2배!" : ""}`);
   showOllieReaction("./assets/images/characters/ollie_happy.png", 1400);
   showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
   playGameSound("level");
@@ -736,17 +765,34 @@ function getNextBoosterDuration(targetState = state) {
     + (targetState.boosterDurationBonusSeconds || 0);
 }
 
+function getBoosterRemainingSeconds(now = Date.now()) {
+  return Math.max(0, ((state.boosterEndTime || 0) - now) / 1000);
+}
+
 function useBooster() {
   if (state.boosterCount <= 0) return;
-  state.boosterCount -= 1;
-  const duration = getNextBoosterDuration();
   const now = Date.now();
+  const maxSeconds = BOOSTER_CONFIG.maxActiveSeconds;
+  const remaining = getBoosterRemainingSeconds(now);
+  let duration = getNextBoosterDuration();
+  // 켜져 있는 동안: 남은 시간 + 이번 시간이 최대치를 넘으면 사용하지 않음 (비료도 차감하지 않음)
+  if (remaining > 0 && remaining + duration > maxSeconds) {
+    showToast(`비료는 최대 ${Math.round(maxSeconds / 60)}분을 넘을 수 없습니다. (남은 시간 ${formatDuration(remaining)} + 이번 비료 ${formatDuration(duration)})`);
+    return;
+  }
+  // 꺼져 있을 때 적립 시간(밥)이 너무 많으면 최대치까지만 쓰고, 못 쓴 적립 시간은 다음 비료에 남김
+  let unusedMealBonus = 0;
+  if (duration > maxSeconds) {
+    unusedMealBonus = Math.min(state.boosterDurationBonusSeconds || 0, duration - maxSeconds);
+    duration = maxSeconds;
+  }
+  state.boosterCount -= 1;
   const currentEnd = Math.max(state.boosterEndTime || 0, now);
   const recipeBonus = getNextBoosterRecipeBonus();
   const activeBonus = state.boosterEndTime > now ? state.activeBoosterRecipeBonus || 0 : 0;
   state.activeBoosterRecipeBonus = Math.max(activeBonus, recipeBonus);
   if (state.boosterMultiplierCharges > 0) state.boosterMultiplierCharges -= 1;
-  state.boosterDurationBonusSeconds = 0;
+  state.boosterDurationBonusSeconds = unusedMealBonus;
   state.boosterEndTime = Math.min(MAX_EFFECT_TIMESTAMP, currentEnd + duration * 1000);
   showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
@@ -774,6 +820,14 @@ function setRecipeQty(qty) {
   renderRecipes();
 }
 
+function getRemainingLevelCount(targetState = state) {
+  return Math.max(0, MAX_GAME_LEVEL - targetState.level);
+}
+
+function getNoodleBoostersLeftToday(recipe, targetState = state) {
+  return Math.max(0, recipe.boosterGrant.dailyCap - (targetState.dailyProgress.noodleBooster || 0));
+}
+
 function useRecipe(recipe) {
   if (!isRecipeUnlocked(recipe)) return;
   const qty = getRecipeQty(recipe);
@@ -785,7 +839,22 @@ function useRecipe(recipe) {
   const unlockedBefore = getUnlockedRecipeCount();
   state.consumed += totalCost;
   state.recipeUses[recipe.id] += qty;
+  const effectNotes = [];
 
+  // 비빔밥: 지금 켜져 있는 레시피 버프 시간을 먼저 연장 (이번에 새로 켜는 버프는 제외)
+  if (recipe.extendBuffSeconds) {
+    const now = Date.now();
+    let extended = 0;
+    for (const other of RECIPES) {
+      if (!other.buff) continue;
+      const untilKey = `${other.buff.type}Until`;
+      if ((state.buffs[untilKey] || 0) > now) {
+        state.buffs[untilKey] = Math.min(MAX_EFFECT_TIMESTAMP, state.buffs[untilKey] + recipe.extendBuffSeconds * qty * 1000);
+        extended += 1;
+      }
+    }
+    effectNotes.push(extended ? `켜진 효과 ${extended}개 +${formatDuration(recipe.extendBuffSeconds * qty)}` : "켜진 레시피 효과가 없어 연장되지 않았어요");
+  }
   if (recipe.buff) {
     const { type, duration, multiplier } = recipe.buff;
     const untilKey = `${type}Until`;
@@ -800,6 +869,30 @@ function useRecipe(recipe) {
   if (recipe.boosterMultiplierBonus) {
     state.boosterMultiplierCharges = Math.min(Number.MAX_SAFE_INTEGER, state.boosterMultiplierCharges + qty);
   }
+  // 식혜: 오프라인 수확 효율 영구 보너스 (상한 있음)
+  if (recipe.offlineBonus) {
+    state.offlineBonus = Math.min(OFFLINE_BONUS_MAX, (state.offlineBonus || 0) + recipe.offlineBonus * qty);
+    effectNotes.push(`쉬는 동안 수확 +${Math.round(state.offlineBonus * 100)}%`);
+  }
+  // 쌀과자: 쓴 양의 일부를 누적 소비량으로 추가 인정 (쌀알은 돌려주지 않음)
+  if (recipe.consumedBonusRate) {
+    const bonus = totalCost * recipe.consumedBonusRate;
+    state.consumed += bonus;
+    effectNotes.push(`소비량 +${formatWeight(bonus)} 추가 인정`);
+  }
+  // 떡국: 다음 게임 LV 보상 2배 적립 (남은 LV 수까지만)
+  if (recipe.levelRewardDouble) {
+    state.levelRewardDoubleCharges = Math.min(getRemainingLevelCount(),
+      (state.levelRewardDoubleCharges || 0) + recipe.levelRewardDouble * qty);
+    effectNotes.push(`LV 보상 2배 ${state.levelRewardDoubleCharges}회 적립`);
+  }
+  // 쌀국수: 비료 부스터 지급 (하루 상한)
+  if (recipe.boosterGrant) {
+    const granted = Math.min(qty * recipe.boosterGrant.amount, getNoodleBoostersLeftToday(recipe));
+    state.boosterCount += granted;
+    state.dailyProgress.noodleBooster = (state.dailyProgress.noodleBooster || 0) + granted;
+    effectNotes.push(granted > 0 ? `비료 부스터 +${granted}` : "오늘 받을 수 있는 비료를 모두 받았어요");
+  }
 
   showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
   showActionEffect("./assets/images/effects/fx_consume_complete.png");
@@ -807,7 +900,8 @@ function useRecipe(recipe) {
   if (getUnlockedRecipeCount() > unlockedBefore) {
     showActionEffect("./assets/images/effects/fx_recipe_unlock.png", undefined, undefined, "effect-unlock");
   }
-  showToast(qty > 1 ? `${recipe.name} ×${qty} — ${recipe.message}` : recipe.message);
+  const baseMessage = qty > 1 ? `${recipe.name} ×${qty} — ${recipe.message}` : recipe.message;
+  showToast(effectNotes.length ? `${baseMessage} (${effectNotes.join(" · ")})` : baseMessage);
   state.dailyProgress.recipe = (state.dailyProgress.recipe || 0) + 1; // "레시피 N회 사용" = 사용 액션 횟수 기준(수량 아님)
   advanceEvent("recipe");
 
@@ -815,6 +909,15 @@ function useRecipe(recipe) {
   checkMilestones();
   render();
   saveState(true);
+}
+
+// 클릭 1회 수확량. 주먹밥 버프 중에는 확률적으로 "대박 수확"(×multiplier)
+function rollHarvestAmount(random = Math.random) {
+  let amount = getTapPower();
+  const critRecipe = RECIPES.find((recipe) => recipe.buff && recipe.buff.type === "crit");
+  const crit = Boolean(critRecipe) && Date.now() < (state.buffs.critUntil || 0) && random() < critRecipe.buff.chance;
+  if (crit) amount *= state.buffs.critMultiplier || critRecipe.buff.multiplier;
+  return { amount, crit };
 }
 
 function checkDailyAndWeeklyReset() {
@@ -868,6 +971,154 @@ function claimAttendanceReward(day) {
   showActionEffect("./assets/images/effects/fx_sparkle.png", undefined, undefined, "effect-small");
   playGameSound(reward.isFinal ? "festival" : "upgrade");
   showToast(`${day}일차 출석 보상: ${reward.label}`);
+  render();
+  saveState(true);
+}
+
+// ----------------------------------------------------------------------------
+// 이미지가 아직 없을 때 emoji로 대신 표시 — 없는 파일은 한 번만 요청하고 이후엔 emoji
+// ----------------------------------------------------------------------------
+const missingImages = new Set();
+
+function markMissingImage(img) {
+  missingImages.add(img.getAttribute("src"));
+  const fallback = document.createElement("span");
+  fallback.className = "emoji-icon";
+  fallback.textContent = img.dataset.emoji || "🍚";
+  img.replaceWith(fallback);
+}
+
+function iconHtml(src, emoji = "🍚") {
+  if (!src || missingImages.has(src)) return `<span class="emoji-icon">${emoji}</span>`;
+  return `<img src="${src}" alt="" data-emoji="${emoji}" onerror="markMissingImage(this)" />`;
+}
+
+// 공통: 쌀을 "소비"로 처리 (보유 쌀알 차감 + 누적 소비량 증가 + LV/마일스톤 판정)
+function consumeRice(amount) {
+  if (!spendRice(amount)) return false;
+  state.consumed += amount;
+  return true;
+}
+
+function afterConsume() {
+  showOllieReaction("./assets/images/characters/ollie_happy.png", 1000);
+  showActionEffect("./assets/images/effects/fx_consume_complete.png");
+  playGameSound("recipe");
+  checkGameLevelUp();
+  checkMilestones();
+  render();
+  saveState(true);
+}
+
+// ----------------------------------------------------------------------------
+// 잔치 (쌀 소비 탭) — balance-config.js의 FEASTS
+// ----------------------------------------------------------------------------
+function getFeastStatus(feast, targetState = state) {
+  if (targetState.feastsDone[feast.id]) return "done";
+  const index = FEASTS.indexOf(feast);
+  if (index > 0 && !targetState.feastsDone[FEASTS[index - 1].id]) return "locked";
+  return "open";
+}
+
+function holdFeast(feast) {
+  if (getFeastStatus(feast) !== "open") return;
+  if (!consumeRice(feast.cost)) return;
+  state.feastsDone[feast.id] = true;
+  const reward = feast.reward;
+  const key = { clickPermanent: "click", autoPermanent: "auto", allPermanent: "all" }[reward.type];
+  if (key) state.permanentBonus[key] += reward.amount;
+  if (reward.flag) state.unlockFlags[reward.flag] = true;
+  showActionEffect("./assets/images/effects/fx_level_up.png", undefined, undefined, "effect-level");
+  playGameSound("festival");
+  showToast(`${feast.name} 개최! ${feast.message} (${reward.label})`);
+  afterConsume();
+}
+
+// ----------------------------------------------------------------------------
+// 쌀 기부 (쌀 소비 탭) — balance-config.js의 DONATION_CONFIG / DONATION_BADGES
+// ----------------------------------------------------------------------------
+let selectedDonationRatio = DONATION_CONFIG.ratios[0]; // UI 전용 상태(저장하지 않음)
+
+function getDonationAmount(ratio = selectedDonationRatio) {
+  return Math.floor(state.rice * ratio);
+}
+
+function setDonationRatio(ratio) {
+  selectedDonationRatio = ratio;
+  renderDonation();
+}
+
+function checkDonationBadges() {
+  for (const badge of DONATION_BADGES) {
+    if (!state.donationBadges[badge.id] && state.donated >= badge.amount) {
+      state.donationBadges[badge.id] = true;
+      state.boosterCount += badge.reward.booster || 0;
+      showToast(`기부 배지 "${badge.name}" 획득! 비료 부스터 +${badge.reward.booster}`);
+    }
+  }
+}
+
+function donateRice() {
+  const amount = getDonationAmount();
+  if (amount < DONATION_CONFIG.minAmount) return;
+  if (!consumeRice(amount)) return;
+  state.donated += amount;
+  showToast(`쌀 ${formatWeight(amount)}을 이웃에게 기부했어요. 고마워요!`);
+  checkDonationBadges();
+  afterConsume();
+}
+
+// ----------------------------------------------------------------------------
+// 주문 배달 (쌀 소비 탭) — balance-config.js의 ORDER_CONFIG
+// ----------------------------------------------------------------------------
+function createOrder(random = Math.random) {
+  const unlocked = RECIPES.filter((recipe) => isRecipeUnlocked(recipe));
+  const recipe = unlocked[Math.floor(random() * unlocked.length)] || RECIPES[0];
+  const perSecond = Math.max(1, getPerSecond(state, { ignoreTimedBuffs: true }));
+  const seconds = ORDER_CONFIG.minSeconds + random() * (ORDER_CONFIG.maxSeconds - ORDER_CONFIG.minSeconds);
+  const qty = Math.max(ORDER_CONFIG.minQty, Math.round((perSecond * seconds) / recipe.cost));
+  state.order = {
+    status: "offered",
+    recipeId: recipe.id,
+    qty,
+    customer: ORDER_CONFIG.customers[Math.floor(random() * ORDER_CONFIG.customers.length)],
+    reward: Math.floor(recipe.cost * qty * ORDER_CONFIG.rewardRate),
+    booster: random() < ORDER_CONFIG.boosterChance ? 1 : 0,
+    expiresAt: Date.now() + ORDER_CONFIG.timeLimitSeconds * 1000,
+    nextAt: 0,
+  };
+}
+
+function endOrder() {
+  state.order = { ...initialState.order, status: "cooldown", nextAt: Date.now() + ORDER_CONFIG.cooldownSeconds * 1000 };
+}
+
+// 게임 루프에서 주기적으로 호출: 첫 주문 배정, 만료 처리, 쿨다운 끝나면 새 주문
+function checkOrderState(now = Date.now()) {
+  const order = state.order;
+  if (order.status === "none" || (order.status === "cooldown" && now >= order.nextAt)) createOrder();
+  else if (order.status === "offered" && now >= order.expiresAt) endOrder();
+}
+
+function getOrderRecipe(order = state.order) {
+  return RECIPES.find((recipe) => recipe.id === order.recipeId) || null;
+}
+
+function deliverOrder() {
+  const order = state.order;
+  const recipe = getOrderRecipe(order);
+  if (order.status !== "offered" || !recipe || Date.now() >= order.expiresAt) return;
+  if (!consumeRice(recipe.cost * order.qty)) return;
+  gainRice(order.reward);
+  state.boosterCount += order.booster;
+  showToast(`${order.customer}에 ${recipe.name.replace(/ \S+$/, "")} ${order.qty}개 납품 완료! 대금 +${formatWeight(order.reward)}${order.booster ? " · 비료 +1" : ""}`);
+  endOrder();
+  afterConsume();
+}
+
+function skipOrder() {
+  if (state.order.status !== "offered") return;
+  endOrder();
   render();
   saveState(true);
 }
@@ -1110,11 +1361,35 @@ function playGameSound(type = "click") {
   oscillator.stop(now + duration);
 }
 
+// 현재 게임 LV의 올리 이미지 경로 (없는 파일로 확인되면 기본 올리)
+function getOllieBaseImage(level = state.level) {
+  const src = `${OLLIE_LEVEL_IMAGE_DIR}/ollie_${level}.png`;
+  return missingImages.has(src) ? OLLIE_HARVEST_IMAGE : src;
+}
+
+function setOllieImage(src) {
+  if (elements.ollieImage.getAttribute("src") !== src) elements.ollieImage.src = src;
+}
+
+// 반응(기쁨·업그레이드) 중이 아니면 LV 이미지로 맞춤. renderStats에서 매 프레임 호출 — 같으면 아무것도 안 함
+function syncOllieBaseImage() {
+  if (!ollieReactionTimer) setOllieImage(getOllieBaseImage());
+}
+
+// 이미지 로드 실패 시: 없는 파일로 기록하고 기본 올리로 바꿈 (같은 파일은 다시 요청하지 않음)
+function handleOllieImageError() {
+  const src = elements.ollieImage.getAttribute("src");
+  if (!src || src === OLLIE_HARVEST_IMAGE) return;
+  missingImages.add(src);
+  setOllieImage(ollieReactionTimer ? OLLIE_HARVEST_IMAGE : getOllieBaseImage());
+}
+
 function showOllieReaction(src, duration = 900) {
   clearTimeout(ollieReactionTimer);
-  elements.ollieImage.src = src;
+  setOllieImage(src);
   ollieReactionTimer = setTimeout(() => {
-    elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
+    ollieReactionTimer = 0;
+    setOllieImage(getOllieBaseImage());
   }, duration);
 }
 
@@ -1133,7 +1408,9 @@ function resetGame() {
   state = cloneInitialState();
   stopRiceTween();
   selectedRecipeQty = 1;
-  elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
+  clearTimeout(ollieReactionTimer);
+  ollieReactionTimer = 0;
+  setOllieImage(getOllieBaseImage());
   localStorage.setItem(getStorageKey(), JSON.stringify(state));
   render();
   showToast("올리의 농장을 새로 시작했어요.");
@@ -1179,7 +1456,7 @@ function renderStats() {
 
   const levelInfo = getGameLevelInfo(state.level);
   // 줄바꿈 앞 공백: 모바일에서 <br>을 숨겨 "LV.3 성실한 농부" 한 줄로 보여줄 때 사용
-  elements.levelLabel.innerHTML = `LV.${state.level} <br />${levelInfo.title}`;
+  elements.levelLabel.innerHTML = `${state.unlockFlags.regionalFestival ? "🏆 " : ""}LV.${state.level} <br />${levelInfo.title}`;
   const nextLevel = getNextGameLevel(state.level);
   if (nextLevel) {
     const span = nextLevel.requiredConsumed - levelInfo.requiredConsumed;
@@ -1191,8 +1468,9 @@ function renderStats() {
 
   const activeStage = [...BACKGROUND_STAGES].reverse().find((stage) => state.consumed >= stage.threshold) || BACKGROUND_STAGES[0];
   state.backgroundStage = activeStage.stage;
-  elements.field.dataset.scene = activeStage.scene;
+  elements.field.dataset.scene = state.unlockFlags.festivalScene ? "festival" : activeStage.scene; // 작은 쌀 축제 보상
   elements.harvestButton.classList.toggle("harvest-crown", Boolean(state.unlockFlags.harvestCrown));
+  syncOllieBaseImage();
 
   elements.soundIcon.src = state.soundEnabled
     ? "./assets/images/ui/ui_sound_on.png"
@@ -1405,51 +1683,184 @@ function renderToolCard(kind, label, tool, config, names, currentOutput) {
 
 function getRecipeEffectNote(recipe) {
   if (recipe.buff) {
-    const label = { click: "클릭", auto: "자동", all: "전체" }[recipe.buff.type];
     const remaining = (state.buffs[`${recipe.buff.type}Until`] - Date.now()) / 1000;
-    return `${recipe.buff.duration}초 × 수량 · ${label} 수확 ×${recipe.buff.multiplier}`
+    const effect = recipe.buff.type === "crit"
+      ? `클릭 ${Math.round(recipe.buff.chance * 100)}% 확률 대박 ×${recipe.buff.multiplier}`
+      : `${{ click: "클릭", auto: "자동", all: "전체" }[recipe.buff.type]} 수확 ×${recipe.buff.multiplier}`;
+    return `${recipe.buff.duration}초 × 수량 · ${effect}`
       + (remaining > 0 ? ` · 남은 시간 ${formatDuration(remaining)}` : "");
   }
   if (recipe.boosterDurationBonusSeconds) {
     return `다음 부스터 +${recipe.boosterDurationBonusSeconds}초 × 수량 · 적립 +${state.boosterDurationBonusSeconds}초`;
   }
-  return `다음 부스터 +${recipe.boosterMultiplierBonus}배 · 수량만큼 횟수 적립 (${state.boosterMultiplierCharges}회 대기)`;
+  if (recipe.boosterMultiplierBonus) {
+    return `다음 부스터 +${recipe.boosterMultiplierBonus}배 · 수량만큼 횟수 적립 (${state.boosterMultiplierCharges}회 대기)`;
+  }
+  if (recipe.offlineBonus) {
+    return `쉬는 동안 수확 영구 +${Math.round(recipe.offlineBonus * 100)}% × 수량 · 현재 +${Math.round((state.offlineBonus || 0) * 100)}% (최대 +${Math.round(OFFLINE_BONUS_MAX * 100)}%)`;
+  }
+  if (recipe.consumedBonusRate) {
+    return `쓴 양의 +${Math.round(recipe.consumedBonusRate * 100)}%를 누적 소비량으로 추가 인정`;
+  }
+  if (recipe.levelRewardDouble) {
+    return `다음 게임 LV 보상 2배 × 수량 · 적립 ${state.levelRewardDoubleCharges || 0}회 (남은 LV ${getRemainingLevelCount()}개까지)`;
+  }
+  if (recipe.extendBuffSeconds) {
+    return `켜져 있는 레시피 효과 시간 +${recipe.extendBuffSeconds}초 × 수량`;
+  }
+  if (recipe.boosterGrant) {
+    return `비료 부스터 +${recipe.boosterGrant.amount} × 수량 · 오늘 ${getNoodleBoostersLeftToday(recipe)}/${recipe.boosterGrant.dailyCap}개 남음`;
+  }
+  return "";
 }
 
 function renderRecipes() {
   if (!elements.recipeQtyButtons) return;
-  elements.recipeQtyButtons.innerHTML = "";
-  for (const option of RECIPE_QUANTITY_OPTIONS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `qty-btn${selectedRecipeQty === option ? " active" : ""}`;
-    btn.textContent = option === "MAX" ? "MAX" : `×${option}`;
-    btn.addEventListener("click", () => setRecipeQty(option));
-    elements.recipeQtyButtons.append(btn);
+  // 수량 버튼은 처음 한 번만 만들고 선택 표시만 갱신 (누르는 도중 교체되지 않도록)
+  if (!elements.recipeQtyButtons.children.length) {
+    for (const option of RECIPE_QUANTITY_OPTIONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = option === "MAX" ? "MAX" : `×${option}`;
+      btn.addEventListener("click", () => setRecipeQty(option));
+      elements.recipeQtyButtons.append(btn);
+    }
   }
+  RECIPE_QUANTITY_OPTIONS.forEach((option, index) => {
+    const btn = elements.recipeQtyButtons.children[index];
+    const className = `qty-btn${selectedRecipeQty === option ? " active" : ""}`;
+    if (btn.className !== className) btn.className = className;
+  });
 
   elements.recipeCount.textContent = `${getUnlockedRecipeCount()}/${RECIPES.length} 해금`;
-  elements.recipeList.innerHTML = "";
-  for (const recipe of RECIPES) {
+  renderStableButtonList(elements.recipeList, RECIPES, (recipe) => {
     const unlocked = isRecipeUnlocked(recipe);
     const qty = unlocked ? getRecipeQty(recipe) : 0;
     const totalCost = recipe.cost * qty;
-    const button = document.createElement("button");
-    button.className = "game-card";
-    button.type = "button";
-    button.disabled = !unlocked || qty <= 0 || state.rice < totalCost;
-    button.innerHTML = `
-      <span class="card-icon"><img src="${recipe.icon}" alt="" /></span>
-      <span>
-        <span class="card-title">${recipe.name}${qty > 1 ? ` ×${qty}` : ""}</span>
-        <span class="card-meta">${unlocked ? getRecipeEffectNote(recipe) : `누적 소비 ${formatWeight(recipe.unlockConsumed)} 필요`}</span>
-        <span class="card-note">사용 ${state.recipeUses[recipe.id]}회</span>
-      </span>
-      <span class="card-cost">${unlocked ? formatWeight(totalCost) : "잠김"}</span>
-    `;
-    button.addEventListener("click", () => useRecipe(recipe));
-    elements.recipeList.append(button);
+    return {
+      className: `game-card${unlocked ? "" : " locked"}`,
+      disabled: !unlocked || qty <= 0 || state.rice < totalCost,
+      html: `
+        <span class="card-icon">${unlocked ? iconHtml(recipe.icon, recipe.emoji) : "🔒"}</span>
+        <span>
+          <span class="card-title">${recipe.name}${qty > 1 ? ` ×${qty}` : ""}</span>
+          <span class="card-meta">${unlocked ? getRecipeEffectNote(recipe) : `누적 소비 ${formatWeight(recipe.unlockConsumed)} 필요`}</span>
+          <span class="card-note">${unlocked ? `사용 ${state.recipeUses[recipe.id] || 0}회` : `1개 ${formatWeight(recipe.cost)}`}</span>
+        </span>
+        <span class="card-cost">${unlocked ? formatWeight(totalCost) : "잠김"}</span>
+      `,
+    };
+  }, useRecipe);
+}
+
+function renderFeasts() {
+  if (!elements.feastList) return;
+  renderStableButtonList(elements.feastList, FEASTS, (feast) => {
+    const status = getFeastStatus(feast);
+    return {
+      className: `game-card feast-card is-${status}${status === "done" ? " claimed" : ""}`,
+      disabled: status !== "open" || state.rice < feast.cost,
+      html: `
+        <span class="card-icon">${status === "locked" ? "🔒" : iconHtml(feast.icon, feast.emoji)}</span>
+        <span>
+          <span class="card-title">${feast.name}</span>
+          <span class="card-meta">${status === "locked" ? "앞 단계 잔치를 먼저 열어주세요" : `쌀 ${formatWeight(feast.cost)} 소비`}</span>
+          <span class="card-note">${feast.reward.label}</span>
+        </span>
+        <span class="card-cost">${status === "done" ? "개최 완료" : status === "locked" ? "잠김" : "잔치 열기"}</span>
+      `,
+    };
+  }, holdFeast);
+}
+
+function renderDonation() {
+  if (!elements.donationRatioButtons) return;
+  const ratios = DONATION_CONFIG.ratios;
+  if (!elements.donationRatioButtons.children.length) {
+    for (const ratio of ratios) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = `${Math.round(ratio * 100)}%`;
+      btn.addEventListener("click", () => setDonationRatio(ratio));
+      elements.donationRatioButtons.append(btn);
+    }
   }
+  ratios.forEach((ratio, index) => {
+    const btn = elements.donationRatioButtons.children[index];
+    const className = `qty-btn${selectedDonationRatio === ratio ? " active" : ""}`;
+    if (btn.className !== className) btn.className = className;
+  });
+
+  const amount = getDonationAmount();
+  const next = DONATION_BADGES.find((badge) => !state.donationBadges[badge.id]);
+  const summary = `누적 기부 ${formatWeight(state.donated)}`
+    + (next ? ` · 다음 배지 "${next.name}"까지 ${formatWeight(Math.max(0, next.amount - state.donated))}` : " · 모든 배지 획득!");
+  if (elements.donationSummary.textContent !== summary) elements.donationSummary.textContent = summary;
+
+  renderStableButtonList(elements.donateButtonWrap, [0], () => ({
+    className: "game-card donate-card",
+    disabled: amount < DONATION_CONFIG.minAmount,
+    html: `
+      <span class="card-icon">${iconHtml(DONATION_CONFIG.icon, DONATION_CONFIG.emoji)}</span>
+      <span>
+        <span class="card-title">보유 쌀알의 ${Math.round(selectedDonationRatio * 100)}% 기부하기</span>
+        <span class="card-meta">${amount < DONATION_CONFIG.minAmount ? `최소 ${formatWeight(DONATION_CONFIG.minAmount)}부터 기부할 수 있어요` : "기부한 쌀은 누적 소비량으로 인정돼요"}</span>
+      </span>
+      <span class="card-cost">${formatWeight(amount)}</span>
+    `,
+  }), donateRice);
+
+  renderStableButtonList(elements.donationBadgeList, DONATION_BADGES, (badge) => {
+    const got = Boolean(state.donationBadges[badge.id]);
+    return {
+      className: `donation-badge${got ? " is-earned" : ""}`,
+      disabled: true,
+      html: `
+        <span class="donation-badge-icon">${got ? iconHtml(badge.icon, badge.emoji) : "🔒"}</span>
+        <span class="donation-badge-name">${badge.name}</span>
+        <span class="donation-badge-goal">${formatWeight(badge.amount)}</span>
+      `,
+    };
+  }, () => {});
+}
+
+function renderOrder() {
+  if (!elements.orderList) return;
+  const order = state.order;
+  const recipe = getOrderRecipe(order);
+  renderStableButtonList(elements.orderList, [0], () => {
+    if (order.status !== "offered" || !recipe) {
+      const wait = order.status === "cooldown" ? Math.max(0, (order.nextAt - Date.now()) / 1000) : 0;
+      return {
+        className: "game-card order-card claimed",
+        disabled: true,
+        html: `
+          <span class="card-icon">${iconHtml(ORDER_CONFIG.icon, ORDER_CONFIG.emoji)}</span>
+          <span>
+            <span class="card-title">새 주문을 기다리는 중</span>
+            <span class="card-meta">${formatDuration(wait)} 후 새 주문이 들어와요</span>
+          </span>
+          <span class="card-cost">대기</span>
+        `,
+      };
+    }
+    const cost = recipe.cost * order.qty;
+    const left = Math.max(0, (order.expiresAt - Date.now()) / 1000);
+    return {
+      className: "game-card order-card",
+      disabled: state.rice < cost,
+      html: `
+        <span class="card-icon">${iconHtml(recipe.icon, recipe.emoji)}</span>
+        <span>
+          <span class="card-title">${order.customer}: ${recipe.name.replace(/ \S+$/, "")} ${order.qty}개</span>
+          <span class="card-meta">필요 쌀 ${formatWeight(cost)} · 남은 시간 ${formatDuration(left)}</span>
+          <span class="card-note">대금 +${formatWeight(order.reward)}${order.booster ? " · 비료 +1" : ""}</span>
+        </span>
+        <span class="card-cost">${state.rice < cost ? "쌀 부족" : "납품"}</span>
+      `,
+    };
+  }, deliverOrder);
+  if (elements.orderSkipButton) elements.orderSkipButton.hidden = order.status !== "offered";
 }
 
 // 게임 루프가 300ms마다 render()를 호출하므로, 버튼을 매번 새로 만들면 누르는 도중
@@ -1640,7 +2051,7 @@ function renderStorage() {
       card.className = `storage-recipe-card${unlocked ? "" : " locked"}`;
       card.innerHTML = unlocked
         ? `
-            <div class="storage-recipe-icon"><img src="${recipe.icon}" alt="" /></div>
+            <div class="storage-recipe-icon">${iconHtml(recipe.icon, recipe.emoji)}</div>
             <div class="storage-recipe-name">${recipe.name}</div>
             <div class="storage-recipe-meta">${state.recipeUses[recipe.id] || 0}회 사용</div>
           `
@@ -1676,6 +2087,9 @@ function render() {
   renderStages();
   renderUpgrades();
   renderRecipes();
+  renderFeasts();
+  renderDonation();
+  renderOrder();
   renderMissions();
   renderAttendance();
   renderEvent();
@@ -1762,8 +2176,9 @@ function setupAdminMode() {
 // 이벤트 바인딩
 // ----------------------------------------------------------------------------
 elements.harvestButton.addEventListener("click", (event) => {
-  const amount = getTapPower();
+  const { amount, crit } = rollHarvestAmount();
   gainRice(amount);
+  if (crit) showToast(`대박 수확! +${formatWeight(amount)}`);
   state.dailyProgress.click = (state.dailyProgress.click || 0) + 1;
   advanceEvent("click");
   const rect = elements.harvestButton.getBoundingClientRect();
@@ -1813,6 +2228,7 @@ function gameLoop(now) {
   if (now - lastFullRender > 300) {
     checkDailyAndWeeklyReset();
     checkEventState();
+    checkOrderState();
     checkMilestones();
     render();
     lastFullRender = now;
@@ -1821,6 +2237,7 @@ function gameLoop(now) {
   requestAnimationFrame(gameLoop);
 }
 
+elements.ollieImage.addEventListener("error", handleOllieImageError);
 setupAdminMode();
 setupMilestoneDrag();
 setupPhraseSign();
@@ -1829,7 +2246,9 @@ checkGameLevelUp();
 checkMilestones();
 checkDailyAndWeeklyReset();
 checkEventState();
+checkOrderState();
 if (elements.eventSkipButton) elements.eventSkipButton.addEventListener("click", skipEvent);
+if (elements.orderSkipButton) elements.orderSkipButton.addEventListener("click", skipOrder);
 render();
 syncFromServer();
 requestAnimationFrame(gameLoop);

@@ -37,6 +37,7 @@ function createGame(enabled = true) {
     emit(name, event = {}) { for (const fn of this.events[name] || []) fn({ preventDefault() {}, ...event }); }
     append(child) { this.children.push(child); }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return name === 'src' ? (this.src ?? null) : (this.attributes[name] ?? null); }
     getContext() { return {}; }
     focus() { this.focused = true; }
     querySelectorAll() { return []; }
@@ -84,10 +85,12 @@ function createGame(enabled = true) {
   };
 }
 
-test('five recipes retain costs, quantities and consumed-based game LV thresholds', () => {
+test('original five recipes retain costs (11 total), quantities and consumed-based game LV thresholds', () => {
   createGame().run(`
-    assert.equal(RECIPES.length, 5);
-    assert.equal(JSON.stringify(RECIPES.map(r => r.cost)), '[150,120,250,300,200]');
+    assert.equal(RECIPES.length, 11);
+    assert.equal(JSON.stringify(RECIPES.slice(0, 5).map(r => r.cost)), '[150,120,250,300,200]');
+    assert.equal(new Set(RECIPES.map(r => r.id)).size, 11);
+    for (let i = 1; i < RECIPES.length; i++) assert.ok(RECIPES[i].unlockConsumed >= RECIPES[i - 1].unlockConsumed);
     assert.equal(JSON.stringify(RECIPE_QUANTITY_OPTIONS), '[1,10,100,"MAX"]');
     assert.equal(GAME_LEVELS.length, 12);
     assert.equal(getGameLevelByConsumed(999).level, 1);
@@ -214,9 +217,11 @@ test('old saves retain unlocked recipes, rewards and accumulated booster time', 
     state = normalizeState(legacy); checkMilestones();
     assert.ok(!('popularity' in state)); assert.equal(state.rice, 42);
     assert.equal(state.boosterCount, 0); assert.equal(state.milestoneAutoBonus, 0.1);
-    assert.equal(state.boosterDurationBonusSeconds, 180); assert.equal(getUnlockedRecipeCount(), 5);
-    state.consumed = 0; assert.equal(getUnlockedRecipeCount(), 5);
-    state = normalizeState(JSON.parse(JSON.stringify(state))); assert.equal(getUnlockedRecipeCount(), 5);
+    const legacyFive = () => RECIPES.slice(0, 5).every(r => isRecipeUnlocked(r));
+    assert.equal(state.boosterDurationBonusSeconds, 180); assert.ok(legacyFive());
+    state.consumed = 0; assert.ok(legacyFive()); assert.equal(getUnlockedRecipeCount(), 5); // 신규 레시피는 소비량으로만 열림
+    state = normalizeState(JSON.parse(JSON.stringify(state))); assert.ok(legacyFive());
+    assert.equal(state.order.status, 'none'); assert.deepEqual(state.feastsDone, {}); assert.equal(state.offlineBonus, 0);
     assert.equal(state.boosterMultiplierCharges, 0);`);
 });
 
@@ -440,4 +445,164 @@ test('rice amount always shows two decimals (kg and above), rounds down, and kee
     const lengths = new Set(); for (let v = 3100; v <= 9990; v += 7) lengths.add(formatRiceAmount(v).length);
     assert.equal(lengths.size, 1);
   `);
+});
+
+test('new recipes: jumeokbap crit, sikhye offline bonus (capped), ssalgwaja extra consumption', () => {
+  const g = createGame();
+  g.run(`resetReady(); state.consumed = 1e9; // 모두 해금
+    useRecipe(recipe('jumeokbap'));
+    assert.equal(state.buffs.critUntil - Date.now(), 60000);
+    const base = getTapPower();
+    assert.equal(rollHarvestAmount(() => 0.05).amount, base * 10); assert.equal(rollHarvestAmount(() => 0.05).crit, true);
+    assert.equal(rollHarvestAmount(() => 0.5).amount, base); assert.equal(rollHarvestAmount(() => 0.5).crit, false);`);
+  g.advance(60001);
+  g.run(`assert.equal(rollHarvestAmount(() => 0).crit, false); // 버프 끝나면 대박 없음
+    selectedRecipeQty = 10; useRecipe(recipe('sikhye')); assert.ok(Math.abs(state.offlineBonus - 0.5) < 1e-9);
+    selectedRecipeQty = 100; useRecipe(recipe('sikhye')); assert.equal(state.offlineBonus, OFFLINE_BONUS_MAX);
+    const before = { rice: state.rice, consumed: state.consumed };
+    selectedRecipeQty = 1; useRecipe(recipe('ssalgwaja'));
+    assert.equal(before.rice - state.rice, 20000);          // 쌀알은 쓴 만큼만 줄고
+    assert.equal(state.consumed - before.consumed, 30000);  // 소비량은 1.5배 인정`);
+  // 식혜 보너스는 오프라인 수확에 반영
+  g.run(`state = cloneInitialState(); state.offlineBonus = 1; saveState(true);`);
+  g.advance(10000);
+  g.run(`const saved = JSON.parse(localStorage.getItem(getStorageKey())); const loaded = normalizeState(saved);
+    assert.equal(loaded.rice - saved.rice, 20); // 1g/s × 10초 × (1 + 100%)`);
+});
+
+test('new recipes: tteokguk doubles next LV reward (capped by remaining levels), bibimbap extends active buffs, ssalguksu daily booster cap', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.rice = 1e12; state.consumed = 125000; checkGameLevelUp();
+    for (const m of milestones) state.claimedMilestones[m.id] = true; // 마일스톤 보상 제외하고 LV 보상만 확인
+    assert.equal(state.level, 5);
+    state.consumed = 2500000; // 떡국 해금 (LV 판정은 아래에서 다시)
+    state.level = 5;
+    useRecipe(recipe('tteokguk'));                   // 이 소비로 LV.6 도달 → LV.6 보상이 2배
+    assert.equal(state.level, 6);
+    assert.ok(Math.abs(state.permanentBonus.click - 0.1) < 1e-9); // LV.6 클릭 영구 +5% × 2
+    assert.equal(state.levelRewardDoubleCharges, 0);
+    selectedRecipeQty = 100; useRecipe(recipe('tteokguk'));
+    assert.equal(state.levelRewardDoubleCharges, getRemainingLevelCount()); // 남은 LV 수까지만 적립
+    selectedRecipeQty = 1;`);
+  g.run(`state.consumed = 1e9; useRecipe(recipe('kimbap')); const kimbapEnd = state.buffs.clickUntil;
+    const autoEnd = state.buffs.autoUntil; // 꺼져 있음
+    selectedRecipeQty = 2; useRecipe(recipe('bibimbap'));
+    assert.equal(state.buffs.clickUntil - kimbapEnd, 60000); // 켜진 버프만 +30초×2
+    assert.equal(state.buffs.autoUntil, autoEnd);            // 꺼진 버프는 그대로
+    selectedRecipeQty = 3; const b0 = state.boosterCount; useRecipe(recipe('ssalguksu'));
+    assert.equal(state.boosterCount - b0, 3);
+    selectedRecipeQty = 10; useRecipe(recipe('ssalguksu'));
+    assert.equal(state.boosterCount - b0, 5);                // 하루 최대 5개
+    assert.equal(state.dailyProgress.noodleBooster, 5);
+    state.dailyDateKey = '2000-01-01'; checkDailyAndWeeklyReset();
+    selectedRecipeQty = 1; useRecipe(recipe('ssalguksu')); assert.equal(state.boosterCount - b0, 6); // 다음 날 다시`);
+});
+
+test('feasts open in order once each, consume rice and grant permanent rewards', () => {
+  createGame().run(`state = cloneInitialState(); state.rice = 1e11;
+    for (const m of milestones) state.claimedMilestones[m.id] = true; // 마일스톤 보상 제외하고 잔치만 확인
+    assert.equal(getFeastStatus(FEASTS[0]), 'open'); assert.equal(getFeastStatus(FEASTS[1]), 'locked');
+    holdFeast(FEASTS[1]); assert.equal(state.rice, 1e11); // 잠긴 잔치는 열 수 없음
+    holdFeast(FEASTS[0]);
+    assert.equal(state.rice, 1e11 - 30000); assert.equal(state.consumed, 30000);
+    assert.ok(Math.abs(state.permanentBonus.all - 0.05) < 1e-9); assert.equal(getFeastStatus(FEASTS[0]), 'done');
+    const snapshot = JSON.stringify(state); holdFeast(FEASTS[0]); assert.equal(JSON.stringify(state), snapshot); // 1회성
+    holdFeast(FEASTS[1]); holdFeast(FEASTS[2]); holdFeast(FEASTS[3]);
+    assert.equal(state.unlockFlags.festivalScene, true); assert.equal(state.unlockFlags.regionalFestival, true);
+    assert.equal(state.level, 9); // 잔치 소비(총 5.05천t)도 LV 진행 → LV.9
+    state = cloneInitialState(); state.rice = 29999; holdFeast(FEASTS[0]); assert.equal(state.feastsDone.neighborhood, undefined);`);
+});
+
+test('donation counts as consumption, respects the selected ratio and minimum, and awards badges once', () => {
+  createGame().run(`state = cloneInitialState(); state.rice = 100000;
+    for (const m of milestones) state.claimedMilestones[m.id] = true; // 마일스톤 보상 제외하고 기부만 확인
+    setDonationRatio(0.25); donateRice();
+    assert.equal(state.rice, 75000); assert.equal(state.donated, 25000); assert.equal(state.consumed, 25000);
+    assert.equal(state.donationBadges.d1, true); assert.ok(state.boosterCount >= 1);
+    const boosters = state.boosterCount;
+    setDonationRatio(1); donateRice(); assert.equal(state.rice, 0); assert.equal(state.donated, 100000);
+    assert.equal(state.donationBadges.d2, undefined);
+    state.rice = 99; donateRice(); assert.equal(state.donated, 100000); // 최소 기부량 미만
+    assert.equal(state.level, 4); // 누적 소비 100kg → LV.4 (25kg 이상, 125kg 미만)`);
+});
+
+test('orders scale with production, pay 1.5x on delivery, expire, and can be skipped', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.rice = 0; checkOrderState();
+    assert.equal(state.order.status, 'offered'); const o = state.order; const r = getOrderRecipe(o);
+    assert.ok(isRecipeUnlocked(r)); assert.ok(o.qty >= ORDER_CONFIG.minQty);
+    assert.equal(o.reward, Math.floor(r.cost * o.qty * 1.5));
+    deliverOrder(); assert.equal(state.order.status, 'offered'); // 쌀 부족: 그대로
+    state.rice = r.cost * o.qty + 5; const booster = state.boosterCount;
+    deliverOrder();
+    assert.equal(state.rice, 5 + o.reward); assert.equal(state.consumed, r.cost * o.qty);
+    assert.equal(state.boosterCount, booster + o.booster);
+    assert.equal(state.order.status, 'cooldown'); checkOrderState(); assert.equal(state.order.status, 'cooldown');`);
+  g.advance(60000);
+  g.run(`checkOrderState(); assert.equal(state.order.status, 'offered');
+    // 생산량이 크면 주문 수량도 커짐
+    state.autoTool = { tier: 8, level: 1 }; endOrder(); state.order.nextAt = 0; checkOrderState();
+    const big = state.order; assert.ok(getOrderRecipe(big).cost * big.qty >= getPerSecond(state, {ignoreTimedBuffs: true}) * 59);
+    skipOrder(); assert.equal(state.order.status, 'cooldown');
+    state.order.nextAt = 0; checkOrderState(); assert.equal(state.order.status, 'offered');`);
+  g.advance(300001);
+  g.run(`checkOrderState(); assert.equal(state.order.status, 'cooldown'); // 5분 지나면 만료`);
+});
+
+test('missing images fall back to emoji and are requested only once', () => {
+  createGame().run(`
+    const src = RECIPES[5].icon;
+    assert.match(iconHtml(src, '🍙'), /<img/);
+    markMissingImage({ getAttribute: () => src, dataset: { emoji: '🍙' }, replaceWith() {} });
+    assert.equal(iconHtml(src, '🍙'), '<span class="emoji-icon">🍙</span>');
+    assert.match(iconHtml(RECIPES[0].icon, '🍚'), /<img/); // 다른 이미지는 그대로`);
+});
+
+test('fertilizer booster: remaining time can never exceed 30 minutes; blocked use keeps the fertilizer', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.boosterCount = 40;
+    for (let i = 0; i < 30; i++) useBooster();                       // 60초 × 30 = 정확히 30분
+    assert.equal(state.boosterEndTime - Date.now(), 30 * 60 * 1000); assert.equal(state.boosterCount, 10);
+    useBooster();                                                     // 30:00 + 1:00 → 거부
+    assert.equal(state.boosterCount, 10); assert.equal(state.boosterEndTime - Date.now(), 30 * 60 * 1000);
+    assert.equal(state.dailyProgress.boosterUse, 30);                 // 거부된 사용은 미션에도 안 셈`);
+  g.advance(59 * 1000);                                               // 남은 29:01
+  g.run(`const end = state.boosterEndTime; useBooster();
+    assert.equal(state.boosterEndTime, end); assert.equal(state.boosterCount, 10); // 29:01 + 1:00 > 30:00 → 거부`);
+  g.advance(1000);                                                    // 남은 29:00
+  g.run(`useBooster(); assert.equal(state.boosterEndTime - Date.now(), 30 * 60 * 1000); assert.equal(state.boosterCount, 9); // 딱 30분은 허용`);
+});
+
+test('fertilizer booster: huge rice-meal bonus is capped at 30 minutes when off and the rest is kept for later', () => {
+  createGame().run(`resetReady(); state.boosterCount = 2; state.boosterEndTime = 0;
+    selectedRecipeQty = 100; useRecipe(recipe('meal'));              // 적립 +6000초 → 다음 비료 101분
+    assert.equal(state.boosterDurationBonusSeconds, 6000);
+    useBooster();
+    assert.equal(state.boosterEndTime - Date.now(), 30 * 60 * 1000);   // 30분까지만 적용
+    assert.equal(state.boosterCount, 1);
+    assert.equal(state.boosterDurationBonusSeconds, 6060 - 1800);     // 못 쓴 4260초는 다음 비료용으로 남음
+    useBooster(); assert.equal(state.boosterCount, 1);               // 켜져 있고 넘치므로 거부`);
+});
+
+test('Ollie base image follows game LV (ollie_1..12.png) and falls back to the default Ollie once a file is missing', () => {
+  const g = createGame();
+  const img = g.node('#ollieImage');
+  g.run(`showOllieReaction = (src, duration) => { clearTimeout(ollieReactionTimer); setOllieImage(src);
+      ollieReactionTimer = setTimeout(() => { ollieReactionTimer = 0; setOllieImage(getOllieBaseImage()); }, duration); };
+    state = cloneInitialState(); renderStats();`);
+  assert.equal(img.src, './assets/images/characters/ollie_1.png');
+  for (const level of [2, 7, 12]) {
+    g.run(`state.level = ${level}; renderStats();`);
+    assert.equal(img.src, `./assets/images/characters/ollie_${level}.png`);
+  }
+  g.run(`showOllieReaction('./assets/images/characters/ollie_happy.png', 1000); renderStats();`);
+  assert.equal(img.src, './assets/images/characters/ollie_happy.png'); // 반응 중에는 LV 이미지로 덮어쓰지 않음
+  g.advance(1000);
+  assert.equal(img.src, './assets/images/characters/ollie_12.png');   // 반응 끝나면 LV 이미지로 복귀
+  img.src = './assets/images/characters/ollie_12.png'; g.run('handleOllieImageError(); renderStats();');
+  assert.equal(img.src, './assets/images/characters/ollie_harvest.png'); // 파일 없음 → 기본 올리
+  g.run('renderStats(); renderStats();');
+  assert.equal(img.src, './assets/images/characters/ollie_harvest.png'); // 다시 요청하지 않음
+  g.run('state.level = 3; renderStats();');
+  assert.equal(img.src, './assets/images/characters/ollie_3.png');      // 다른 LV 파일은 따로 시도
 });

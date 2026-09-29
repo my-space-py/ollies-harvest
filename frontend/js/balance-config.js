@@ -106,7 +106,113 @@ const RECIPES = [
     buff: { type: "all", multiplier: 2, duration: 45 },
     message: "남은 밥도 고소한 누룽지가 되었어요.",
   },
+  // ---- 중·후반 레시피 (2026-09-29 추가). 이미지 파일이 없으면 emoji로 대신 표시 ----
+  {
+    // 버프 동안 클릭마다 chance 확률로 클릭 수확량 ×multiplier "대박 수확"
+    id: "jumeokbap", name: "주먹밥 만들기", icon: "./assets/images/recipes/recipe_jumeokbap.png", emoji: "🍙",
+    cost: 1000, unlockConsumed: 20000,
+    buff: { type: "crit", multiplier: 10, chance: 0.1, duration: 60 },
+    message: "든든한 주먹밥을 먹은 올리의 손끝에 힘이 넘쳐요!",
+  },
+  {
+    // 오프라인(쉬는 동안) 수확 효율 영구 +5%/개, 최대 +100%
+    id: "sikhye", name: "식혜 만들기", icon: "./assets/images/recipes/recipe_sikhye.png", emoji: "🥤",
+    cost: 5000, unlockConsumed: 100000,
+    offlineBonus: 0.05,
+    message: "시원한 식혜 덕분에 쉬는 동안에도 일손이 척척이에요.",
+  },
+  {
+    // 간식 나눔: 이 레시피로 쓴 양의 +50%를 누적 소비량으로 추가 인정 (쌀알은 돌려주지 않음)
+    id: "ssalgwaja", name: "쌀과자 굽기", icon: "./assets/images/recipes/recipe_ssalgwaja.png", emoji: "🍘",
+    cost: 20000, unlockConsumed: 500000,
+    consumedBonusRate: 0.5,
+    message: "바삭한 쌀과자를 이웃과 나눠 먹었어요.",
+  },
+  {
+    // 다음 게임 LV 보상 2배 (1개당 1회 적립, 남은 LV 수까지)
+    id: "tteokguk", name: "떡국 끓이기", icon: "./assets/images/recipes/recipe_tteokguk.png", emoji: "🍲",
+    cost: 100000, unlockConsumed: 2500000,
+    levelRewardDouble: 1,
+    message: "떡국 한 그릇에 한 살 더! 다음 성장이 더 풍성해져요.",
+  },
+  {
+    // 지금 켜져 있는 레시피 버프(김밥·떡·누룽지·주먹밥)의 남은 시간 +30초/개
+    id: "bibimbap", name: "비빔밥 비비기", icon: "./assets/images/recipes/recipe_bibimbap.png", emoji: "🥣",
+    cost: 500000, unlockConsumed: 10000000,
+    extendBuffSeconds: 30,
+    message: "골고루 비빈 비빔밥처럼 모든 효과가 오래가요.",
+  },
+  {
+    // 비료 부스터 +1/개, 하루 최대 dailyCap개까지 지급 (넘는 수량은 소비만 인정)
+    id: "ssalguksu", name: "쌀국수 삶기", icon: "./assets/images/recipes/recipe_ssalguksu.png", emoji: "🍜",
+    cost: 2000000, unlockConsumed: 50000000,
+    boosterGrant: { amount: 1, dailyCap: 5 },
+    message: "쫄깃한 쌀국수를 팔아 비료를 마련했어요.",
+  },
 ];
+
+// 식혜 영구 오프라인 보너스 상한 (+100%)
+const OFFLINE_BONUS_MAX = 1;
+
+// ----------------------------------------------------------------------------
+// 3-1. 잔치 — 큰 양을 한 번에 소비하고 영구 보상. 앞 단계를 연 뒤에 다음 단계가 열림(1회성)
+// ----------------------------------------------------------------------------
+// reward.type: clickPermanent | autoPermanent | allPermanent (+ flag: 해금 플래그)
+const FEASTS = [
+  {
+    id: "neighborhood", name: "동네 밥상", icon: "./assets/images/feasts/feast_neighborhood.png", emoji: "🏠",
+    cost: 30000, reward: { type: "allPermanent", amount: 0.05, label: "전체 수확 영구 +5%" },
+    message: "이웃들과 둘러앉아 따뜻한 밥상을 나눴어요.",
+  },
+  {
+    id: "schoolLunch", name: "학교 급식 지원", icon: "./assets/images/feasts/feast_school_lunch.png", emoji: "🏫",
+    cost: 1000000, reward: { type: "autoPermanent", amount: 0.1, label: "자동 수확 영구 +10%" },
+    message: "아이들이 우리 쌀로 지은 급식을 맛있게 먹었어요.",
+  },
+  {
+    id: "smallFestival", name: "작은 쌀 축제", icon: "./assets/images/feasts/feast_small_festival.png", emoji: "🎪",
+    cost: 50000000, reward: { type: "allPermanent", amount: 0.1, flag: "festivalScene", label: "전체 수확 영구 +10% · 축제 배경" },
+    message: "작은 논에서 시작된 수확이 모두의 축제가 되었어요!",
+  },
+  {
+    id: "regionalFestival", name: "지역 대표 쌀 축제", icon: "./assets/images/feasts/feast_regional_festival.png", emoji: "🏆",
+    cost: 5000000000, reward: { type: "allPermanent", amount: 0.15, flag: "regionalFestival", label: "전체 수확 영구 +15% · 축제 배지" },
+    message: "올리의 쌀 축제가 지역을 대표하는 축제가 되었어요!",
+  },
+];
+
+// ----------------------------------------------------------------------------
+// 3-2. 쌀 기부(푸드뱅크) — 보유 쌀알의 일부를 기부 → 누적 소비량으로 인정, 누적 기부량 배지
+// ----------------------------------------------------------------------------
+const DONATION_CONFIG = {
+  ratios: [0.1, 0.25, 0.5, 1], // 선택 버튼 (보유량 대비)
+  minAmount: 100, // 이보다 적으면 기부 불가(g)
+  icon: "./assets/images/sharing/donation_box.png", emoji: "🎁",
+};
+
+const DONATION_BADGES = [
+  { id: "d1", amount: 10000, name: "새싹 나눔이", icon: "./assets/images/sharing/badge_donation_1.png", emoji: "🌱", reward: { booster: 1 } },
+  { id: "d2", amount: 1000000, name: "따뜻한 이웃", icon: "./assets/images/sharing/badge_donation_2.png", emoji: "💛", reward: { booster: 3 } },
+  { id: "d3", amount: 100000000, name: "나눔 농부", icon: "./assets/images/sharing/badge_donation_3.png", emoji: "🧺", reward: { booster: 5 } },
+  { id: "d4", amount: 10000000000, name: "나눔의 전설", icon: "./assets/images/sharing/badge_donation_4.png", emoji: "👑", reward: { booster: 10 } },
+];
+
+// ----------------------------------------------------------------------------
+// 3-3. 주문 배달 — 무작위 손님이 해금된 레시피 N개를 주문. 제한 시간 안에 납품하면 대금 지급
+// ----------------------------------------------------------------------------
+// 수량은 "지금 자동 생산량의 minSeconds~maxSeconds초치" 쌀이 들도록 정해져 진행 단계에 맞게 커짐
+// 대금 = 납품에 쓴 쌀 × rewardRate. boosterChance 확률로 비료 부스터 +1 추가
+const ORDER_CONFIG = {
+  timeLimitSeconds: 300,
+  cooldownSeconds: 60, // 납품·만료·거절 후 다음 주문까지
+  minSeconds: 60,
+  maxSeconds: 180,
+  minQty: 3,
+  rewardRate: 1.5,
+  boosterChance: 0.2,
+  icon: "./assets/images/sharing/order_delivery.png", emoji: "📦",
+  customers: ["마을 식당", "학교 매점", "동네 잔칫집", "등산객 쉼터", "한옥 카페", "시장 분식집"],
+};
 
 const RECIPE_QUANTITY_OPTIONS = [1, 10, 100, "MAX"];
 
@@ -154,6 +260,8 @@ const ADMIN_CONFIG = {
 const BOOSTER_CONFIG = {
   baseMultiplier: 2,
   baseDurationSeconds: 60,
+  // 남은 시간 + 이번 비료 시간이 이 값을 넘으면 사용 불가 (비료가 꺼져 있을 때는 이 값까지만 적용)
+  maxActiveSeconds: 30 * 60,
 };
 
 // ----------------------------------------------------------------------------

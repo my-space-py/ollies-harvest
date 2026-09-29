@@ -18,7 +18,7 @@
         window.location.href = "auth.html";
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=46" />
+    <link rel="stylesheet" href="./styles.css?v=48" />
   </head>
   <body>
     <!-- 화면 뷰포트: 하단 네비게이션 위 영역. 6개 화면 중 하나만 보이고, 각 화면은 자기 안에서만 스크롤됨 (js/router.js) -->
@@ -229,13 +229,40 @@
           <span>수확 장비 강화</span>
         </div>
         <div id="upgradeList" class="tool-card-list"></div>
+      </div>
+    </section>
 
+    <!-- 쌀 소비 화면: 레시피 / 잔치 / 쌀 기부 / 주문 배달 (목록은 game.js가 그림) -->
+    <section id="consumeScreen" class="app-screen screen" hidden aria-label="쌀 소비">
+      <div class="panel-section screen-inner">
         <div class="section-title">
           <h2><img src="./assets/images/ui/ui_recipe.png" alt="" />레시피</h2>
-          <span id="recipeCount">0/5 해금</span>
+          <span id="recipeCount">0/11 해금</span>
         </div>
         <div id="recipeQtyButtons" class="qty-selector" aria-label="레시피 구매 수량"></div>
         <div id="recipeList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2><span class="section-emoji" aria-hidden="true">🎉</span>잔치</h2>
+          <span>큰 소비 · 영구 보상 · 순서대로 1회</span>
+        </div>
+        <div id="feastList" class="card-list"></div>
+
+        <div class="section-title">
+          <h2><span class="section-emoji" aria-hidden="true">🎁</span>쌀 기부</h2>
+          <span>기부한 쌀도 누적 소비량</span>
+        </div>
+        <p id="donationSummary" class="consume-summary"></p>
+        <div id="donationRatioButtons" class="qty-selector" aria-label="기부 비율"></div>
+        <div id="donateButtonWrap" class="card-list"></div>
+        <div id="donationBadgeList" class="donation-badge-list" aria-label="기부 배지"></div>
+
+        <div class="section-title">
+          <h2><span class="section-emoji" aria-hidden="true">📦</span>주문 배달</h2>
+          <span>제한 시간 안에 납품하면 대금 1.5배</span>
+        </div>
+        <div id="orderList" class="card-list"></div>
+        <button id="orderSkipButton" type="button" class="event-skip-btn" hidden>이 주문 거절하기</button>
       </div>
     </section>
 
@@ -327,7 +354,11 @@
       </button>
       <button type="button" class="nav-btn" data-tab="upgrade">
         <img class="nav-btn-icon" src="./assets/images/ui/11_업그레이드.png" alt="" />
-        <span class="nav-btn-label">업그레이드</span>
+        <span class="nav-btn-label" data-short="강화">업그레이드</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="consume">
+        <img class="nav-btn-icon" src="./assets/images/ui/ui_recipe.png" alt="" />
+        <span class="nav-btn-label">쌀 소비</span>
       </button>
       <button type="button" class="nav-btn" data-tab="mission">
         <img class="nav-btn-icon" src="./assets/images/ui/12_미션.png" alt="" />
@@ -426,11 +457,15 @@
           </section>
 
           <section>
-            <h3>🍚 3. 쌀 소비하기 = 성장하기 (업그레이드 탭 아래 레시피)</h3>
+            <h3>🍚 3. 쌀 소비하기 = 성장하기 (쌀 소비 탭)</h3>
             <ul>
-              <li>이 게임의 핵심은 <b>쌀을 소비</b>하는 거예요. 레시피를 만들면 <b>누적 쌀 소비량</b>이 올라가고, 소비량에 따라 <b>게임 LV</b>이 올라가요.</li>
-              <li>밥 → 다음 비료 시간 증가 · 김밥 → 클릭 수확 ×3 · 떡 → 자동 수확 ×3 · 쌀빵 → 다음 비료 배율 증가 · 누룽지 → 전체 수확 ×2</li>
-              <li>×1 / ×10 / ×100 / MAX로 한 번에 여러 개 만들 수 있어요.</li>
+              <li>이 게임의 핵심은 <b>쌀을 소비</b>하는 거예요. 쌀을 쓰면 <b>누적 쌀 소비량</b>이 올라가고, 소비량에 따라 <b>게임 LV</b>이 올라가요.</li>
+              <li><b>레시피 11종</b>은 소비량이 늘수록 하나씩 열려요. ×1 / ×10 / ×100 / MAX로 한 번에 여러 개 만들 수 있어요.</li>
+              <li>밥 → 다음 비료 시간 증가 · 김밥 → 클릭 ×3 · 떡 → 자동 ×3 · 쌀빵 → 다음 비료 배율 증가 · 누룽지 → 전체 ×2</li>
+              <li>주먹밥 → 클릭 대박(10% 확률 ×10) · 식혜 → 쉬는 동안 수확 증가 · 쌀과자 → 소비량 1.5배 인정 · 떡국 → 다음 LV 보상 2배 · 비빔밥 → 켜진 효과 시간 연장 · 쌀국수 → 비료 획득(하루 5개)</li>
+              <li><b>잔치</b>: 한 번에 많은 쌀을 써서 영구 보너스를 받아요. 동네 밥상부터 순서대로 열려요.</li>
+              <li><b>쌀 기부</b>: 보유 쌀알의 일부를 이웃에게 나눠요. 기부한 쌀도 소비량이 되고, 모이면 배지를 받아요.</li>
+              <li><b>주문 배달</b>: 손님 주문을 제한 시간 안에 납품하면 쓴 쌀의 1.5배를 대금으로 받아요.</li>
             </ul>
           </section>
 
@@ -438,6 +473,7 @@
             <h3>🌱 4. 비료 부스터</h3>
             <ul>
               <li>하단 <b>비료 사용</b> 버튼을 누르면 일정 시간 전체 수확량이 2배가 돼요.</li>
+              <li>켜져 있을 때 또 쓰면 시간이 늘어나요. 단, 남은 시간은 <b>최대 30분</b>을 넘을 수 없어요.</li>
               <li>비료는 LV업, 오늘의 미션, 출석, 소비 마일스톤 보상으로 얻어요.</li>
             </ul>
           </section>
@@ -491,8 +527,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./js/balance-config.js?v=7"></script>
-    <script src="./game.js?v=27"></script>
+    <script src="./js/balance-config.js?v=9"></script>
+    <script src="./game.js?v=30"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         localStorage.removeItem("currentUser");
@@ -575,6 +611,6 @@
       window.addEventListener("load", syncQuickMenuButtonSize);
       window.addEventListener("resize", syncQuickMenuButtonSize);
     </script>
-    <script src="./js/router.js?v=1"></script>
+    <script src="./js/router.js?v=2"></script>
   </body>
 </html>

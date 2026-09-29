@@ -1,7 +1,7 @@
 // ============================================================================
 // 올리의 수확 — 하단 탭 화면 전환 (해시 기반 SPA 라우터)
 // ----------------------------------------------------------------------------
-// URL 해시(#home, #upgrade, #mission, #stats, #ranking, #friends)가 현재 화면을 나타냅니다.
+// URL 해시(#home, #upgrade, #consume, #mission, #stats, #ranking, #friends)가 현재 화면을 나타냅니다.
 // 탭 클릭은 해시만 바꾸고, 실제 화면 전환은 hashchange 한 곳에서만 처리합니다.
 // (탭 클릭 / 뒤로가기 / 새로고침 / 주소 직접 입력 경로가 모두 같은 흐름을 탑니다.)
 // game.js와 index.html 인라인 스크립트보다 뒤에 로드해야 합니다.
@@ -21,6 +21,7 @@ const SCREENS = {
     },
   },
   upgrade: { element: document.getElementById("upgradeScreen") },
+  consume: { element: document.getElementById("consumeScreen") },
   mission: { element: document.getElementById("missionScreen") },
   stats: {
     element: document.getElementById("statsScreen"),
