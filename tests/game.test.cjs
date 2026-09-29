@@ -395,3 +395,49 @@ test('daily phrase is random per visit, never repeats the previous visit, and st
     assert.equal(g.node('#dailyPhraseText').textContent, first);
   }
 });
+
+test('rice display flows up to click/reward gains, keeps up with passive gain, and drops instantly when spending', () => {
+  const g = createGame();
+  const frames = (ms) => { const out = []; for (let t = 0; t < ms; t += 16) { g.advance(16); out.push(g.run('getDisplayedRice()')); } return out; };
+  g.run(`state = cloneInitialState(); state.rice = 3100; stopRiceTween();
+    gainRice(200);                                   // 클릭·보상: 실제 값은 즉시, 표시는 흐르듯
+    assert.equal(state.rice, 3300); assert.equal(getDisplayedRice(), 3100);`);
+  const seen = frames(640);                          // 60fps로 약 0.64초
+  for (let i = 1; i < seen.length; i++) assert.ok(seen[i] >= seen[i - 1], 'display must only go up');
+  assert.ok(seen[0] > 3100 && seen[0] < 3150, `first frame should move only a little, got ${seen[0]}`);
+  assert.ok(seen.some(v => v > 3150 && v < 3250), 'should pass through 3.2kg on the way');
+  assert.equal(seen.at(-1), 3300);                   // 끝나면 정확히 실제 값
+
+  // 화면이 멈췄다(프레임 드랍) 다시 그려져도 앞부분을 건너뛰지 않음
+  g.run(`state.rice = 3100; stopRiceTween(); gainRice(200);`);
+  g.advance(300);
+  const afterStall = g.run('getDisplayedRice()');
+  assert.ok(afterStall < 3200, `stall must not skip ahead, got ${afterStall}`);
+  frames(700);
+
+  g.run(`gainRice(500); gainRice(500);               // 연속 증가: 남은 양에 더해짐
+    assert.equal(state.rice, 4300); assert.equal(getDisplayedRice(), 3300);`);
+  frames(300);
+  g.run(`assert.ok(getDisplayedRice() > 3300 && getDisplayedRice() < 4300);
+    spendRice(1000); assert.equal(getDisplayedRice(), state.rice); // 소비는 즉시 반영
+    gainRice(5, { instant: true }); assert.equal(getDisplayedRice(), state.rice); // 자동 수확은 즉시
+    renderStats(); assert.equal(elements.rice.textContent, formatRiceAmount(state.rice));`);
+});
+
+test('rice amount always shows two decimals (kg and above), rounds down, and keeps a constant length while rising', () => {
+  createGame().run(`
+    assert.equal(formatRiceAmount(450), '450g');
+    assert.equal(formatRiceAmount(1000), '1.00kg');
+    assert.equal(formatRiceAmount(3100), '3.10kg');
+    assert.equal(formatRiceAmount(3200), '3.20kg');
+    assert.equal(formatRiceAmount(3300), '3.30kg');
+    assert.equal(formatRiceAmount(3219.99), '3.21kg'); // 내림: 보유량보다 크게 보이지 않음
+    assert.equal(formatRiceAmount(49300), '49.30kg');
+    assert.equal(formatRiceAmount(123456), '123.45kg');
+    assert.equal(formatRiceAmount(999999), '999.99kg'); // 반올림으로 1000.00kg이 되지 않음
+    assert.equal(formatRiceAmount(1000000), '1.00t');
+    assert.equal(formatRiceAmount(123456789), '123.45t');
+    const lengths = new Set(); for (let v = 3100; v <= 9990; v += 7) lengths.add(formatRiceAmount(v).length);
+    assert.equal(lengths.size, 1);
+  `);
+});

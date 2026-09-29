@@ -45,6 +45,7 @@
 - **배경 성장 5단계**(작은 논 → 수확 축제), 홈 하단 "오늘의 문구"(50종, 접속할 때마다 무작위 · 직전 접속 문구 제외), 벼 성장(LV 진행도) 카드
 - **시연용 관리자 모드**: 로고 3초 내 5회 클릭 → 쌀알 지급 패널. `ADMIN_MODE_ENABLED`로 차단 (**현재 `true`**)
 - 효과음(Web Audio 생성 톤) On/Off, Canvas 논 배경 애니메이션
+- **보유 쌀알 숫자 애니메이션** (2026-09-29): 클릭·보상 등 한 번에 늘어난 양은 0.6초 동안 감속하며 흐르듯 올라감(`game.js` `startRiceTween`/`getDisplayedRice`). 실제 값(`state.rice`)은 즉시 바뀌고 표시만 따라감. 자동 수확은 즉시 반영, 소비(감소)는 즉시 반영. 프레임이 멈춰도 앞부분을 건너뛰지 않도록 1회 진행량 34ms 상한. 보유 쌀알은 kg 이상에서 항상 소수점 두 자리(`formatRiceAmount`, 내림) + 숫자 폭 고정(`font-variant-numeric: tabular-nums`)으로 올라가는 동안 좌우 흔들림 없음
 
 ### 1.4 저장/동기화
 - `localStorage` 키 `ollies-harvest-save-v2:<user_id>` (계정별 분리), 세션은 `localStorage["currentUser"]`

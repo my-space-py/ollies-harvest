@@ -264,6 +264,7 @@ async function syncFromServer() {
     const localTimestamp = hasLocalSave ? state.lastSavedAt || 0 : 0;
     if (serverState && (serverState.lastSavedAt || 0) > localTimestamp) {
       state = normalizeState(serverState);
+      stopRiceTween();
       hasLocalSave = true;
       checkGameLevelUp();
       checkMilestones();
@@ -566,7 +567,49 @@ function getUnlockedRecipeCount() {
   return RECIPES.filter((recipe) => isRecipeUnlocked(recipe)).length;
 }
 
-function gainRice(amount) {
+// ----------------------------------------------------------------------------
+// 보유 쌀알 표시 애니메이션 — 한 번에 늘어난 양(클릭·보상)을 숫자가 흐르듯 올라가게 표시
+// ----------------------------------------------------------------------------
+// 실제 값(state.rice)은 즉시 바뀌고, 화면에는 "아직 다 올라가지 않은 양"(offset)을 뺀 값을 보여준다.
+// offset은 RICE_TWEEN_MS 동안 감속하며(easeOutCubic) 0이 된다. 연속으로 늘어나면 남은 양에 더해 다시 시작.
+// 자동 수확처럼 매 프레임 조금씩 늘어나는 양은 애니메이션 없이 바로 반영해 표시가 뒤처지지 않게 한다.
+const RICE_TWEEN_MS = 600;
+// 한 번 읽을 때 진행시키는 최대 시간. 클릭 처리 등으로 화면이 잠깐 멈춰도(프레임 드랍)
+// 애니메이션 앞부분을 건너뛰지 않고 이어서 흐르게 한다.
+const RICE_TWEEN_MAX_STEP_MS = 34;
+const riceTween = { startOffset: 0, elapsed: 0, lastReadAt: 0 };
+
+function getRiceTweenOffset(now = performance.now()) {
+  if (riceTween.startOffset <= 0) return 0;
+  riceTween.elapsed += Math.min(Math.max(0, now - riceTween.lastReadAt), RICE_TWEEN_MAX_STEP_MS);
+  riceTween.lastReadAt = now;
+  const progress = Math.min(1, riceTween.elapsed / RICE_TWEEN_MS);
+  if (progress >= 1) {
+    riceTween.startOffset = 0;
+    return 0;
+  }
+  return riceTween.startOffset * (1 - progress) ** 3; // easeOutCubic의 남은 양
+}
+
+function startRiceTween(amount) {
+  if (!(amount > 0)) return;
+  const now = performance.now();
+  riceTween.startOffset = getRiceTweenOffset(now) + amount;
+  riceTween.elapsed = 0;
+  riceTween.lastReadAt = now;
+}
+
+function stopRiceTween() {
+  riceTween.startOffset = 0;
+}
+
+function getDisplayedRice() {
+  return Math.max(0, state.rice - getRiceTweenOffset());
+}
+
+// options.instant: 애니메이션 없이 바로 표시 (자동 수확 등 매 프레임 증가분)
+function gainRice(amount, options = {}) {
+  if (!options.instant) startRiceTween(amount);
   state.rice += amount;
   state.totalHarvested += amount;
   state.weeklyHarvest += amount;
@@ -575,6 +618,7 @@ function gainRice(amount) {
 function spendRice(amount) {
   if (amount <= 0 || state.rice < amount) return false;
   state.rice -= amount;
+  stopRiceTween(); // 쓴 만큼은 바로 줄어든 값으로 표시
   return true;
 }
 
@@ -589,6 +633,19 @@ const WEIGHT_UNITS = [
   { limit: 1e18, suffix: "Gt", divisor: 1e15 },
   { limit: Infinity, suffix: "Tt", divisor: 1e18 },
 ];
+
+// 보유 쌀알처럼 계속 바뀌는 숫자용: kg 이상은 항상 소수점 두 자리(끝자리 0 유지)로 표시해
+// 글자 수가 바뀌지 않게 한다. 반올림 대신 내림을 써서 실제 보유량보다 크게 보이지 않게 한다.
+function formatRiceAmount(value) {
+  if (!Number.isFinite(value) || value < 1000) return formatWeight(value);
+  for (const unit of WEIGHT_UNITS) {
+    if (value < unit.limit) {
+      const hundredths = Math.floor((value / unit.divisor) * 100 + 1e-6);
+      return `${(hundredths / 100).toFixed(2)}${unit.suffix}`;
+    }
+  }
+  return formatWeight(value);
+}
 
 function formatWeight(value) {
   if (!Number.isFinite(value)) return "0g";
@@ -1074,6 +1131,7 @@ function showActionEffect(src, x, y, className = "") {
 
 function resetGame() {
   state = cloneInitialState();
+  stopRiceTween();
   selectedRecipeQty = 1;
   elements.ollieImage.src = OLLIE_HARVEST_IMAGE;
   localStorage.setItem(getStorageKey(), JSON.stringify(state));
@@ -1115,7 +1173,7 @@ function drawField(now) {
 // 렌더링
 // ----------------------------------------------------------------------------
 function renderStats() {
-  elements.rice.textContent = formatWeight(state.rice);
+  elements.rice.textContent = formatRiceAmount(getDisplayedRice());
   elements.perSecond.textContent = `${formatWeight(getPerSecond())}/s`;
   elements.tapValue.textContent = `+${formatWeight(getTapPower())}`;
 
@@ -1545,7 +1603,7 @@ function setupMilestoneDrag() {
 
 function renderStatsSummary() {
   elements.statsSummary.innerHTML = `
-    <div class="stats-item"><span>보유 쌀알</span><strong>${formatWeight(state.rice)}</strong></div>
+    <div class="stats-item"><span>보유 쌀알</span><strong>${formatRiceAmount(getDisplayedRice())}</strong></div>
     <div class="stats-item"><span>누적 쌀 소비량</span><strong>${formatWeight(state.consumed)}</strong></div>
     <div class="stats-item"><span>게임 LV</span><strong>Lv. ${state.level}<br />${getGameLevelInfo(state.level).title}</strong></div>
     <div class="stats-item"><span>비료 부스터</span><strong>${state.boosterCount}개 보유</strong></div>
@@ -1648,9 +1706,10 @@ function addAdminRice(rawAmount, unit = "kg") {
     return false;
   }
   // gainRice()는 누적/주간 수확량도 바꾸므로 관리자 지급에는 사용하지 않습니다.
+  startRiceTween(amount);
   state.rice = nextRice;
   saveState(true);
-  elements.rice.textContent = formatWeight(state.rice);
+  elements.rice.textContent = formatRiceAmount(getDisplayedRice());
   renderUpgrades();
   renderRecipes();
   renderStatsSummary();
@@ -1748,7 +1807,7 @@ function gameLoop(now) {
   lastTick = now;
 
   const passiveGain = getPerSecond() * deltaSeconds;
-  if (passiveGain > 0) gainRice(passiveGain);
+  if (passiveGain > 0) gainRice(passiveGain, { instant: true });
 
   renderStats();
   if (now - lastFullRender > 300) {
