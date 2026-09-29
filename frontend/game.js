@@ -1215,21 +1215,41 @@ function renderRecipes() {
   }
 }
 
+// 게임 루프가 300ms마다 render()를 호출하므로, 버튼을 매번 새로 만들면 누르는 도중
+// (mousedown ~ mouseup 사이) 노드가 교체되어 클릭이 씹힌다. 버튼은 처음 한 번만 만들고
+// 이후에는 바뀐 클래스/활성 상태/내용만 갱신한다.
+function renderStableButtonList(container, items, getView, onClick) {
+  if (container.children.length !== items.length) {
+    container.innerHTML = "";
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.addEventListener("click", () => onClick(item));
+      container.append(button);
+    }
+  }
+  items.forEach((item, index) => {
+    const button = container.children[index];
+    const view = getView(item);
+    if (button.className !== view.className) button.className = view.className;
+    button.disabled = Boolean(view.disabled);
+    if (button.renderedHtml !== view.html) {
+      button.renderedHtml = view.html;
+      button.innerHTML = view.html;
+    }
+  });
+}
+
 function renderMissions() {
   const containers = [elements.missionList, elements.missionDialogList].filter(Boolean);
-  for (const container of containers) container.innerHTML = "";
-
-  for (const mission of DAILY_MISSIONS) {
+  const getView = (mission) => {
     const progress = Math.min(state.dailyProgress[mission.type] || 0, mission.target);
     const done = progress >= mission.target;
     const claimed = state.dailyClaimed[mission.id];
-
-    for (const container of containers) {
-      const button = document.createElement("button");
-      button.className = `game-card${claimed ? " claimed" : ""}`;
-      button.type = "button";
-      button.disabled = !done || claimed;
-      button.innerHTML = `
+    return {
+      className: `game-card${claimed ? " claimed" : ""}`,
+      disabled: !done || claimed,
+      html: `
         <span class="card-icon"><img src="./assets/images/ui/ui_mission.png" alt="" /></span>
         <span>
           <span class="card-title">${mission.name}</span>
@@ -1237,10 +1257,11 @@ function renderMissions() {
           <span class="card-note">${mission.reward.label}</span>
         </span>
         <span class="card-cost">${claimed ? "완료" : done ? "받기" : "진행 중"}</span>
-      `;
-      button.addEventListener("click", () => claimDailyMission(mission));
-      container.append(button);
-    }
+      `,
+    };
+  };
+  for (const container of containers) {
+    renderStableButtonList(container, DAILY_MISSIONS, getView, claimDailyMission);
   }
 }
 
@@ -1250,25 +1271,22 @@ function formatMilestoneWeight(amount) {
 
 function renderAttendance() {
   if (elements.attendanceList) {
-    elements.attendanceList.innerHTML = "";
-    for (const reward of ATTENDANCE_REWARDS) {
+    renderStableButtonList(elements.attendanceList, ATTENDANCE_REWARDS, (reward) => {
       const claimed = state.attendance.claimedDays[reward.day];
       const unlocked = state.attendance.count >= reward.day;
-      const button = document.createElement("button");
-      button.className = `game-card${claimed ? " claimed" : ""}`;
-      button.type = "button";
-      button.disabled = !unlocked || claimed;
-      button.innerHTML = `
-        <span class="card-icon">${claimed ? "✔" : unlocked ? "🎁" : "🔒"}</span>
-        <span>
-          <span class="card-title">${reward.day}일차${reward.isFinal ? " (마지막)" : ""}</span>
-          <span class="card-meta">${reward.label}</span>
-        </span>
-        <span class="card-cost">${claimed ? "완료" : unlocked ? "받기" : "대기"}</span>
-      `;
-      button.addEventListener("click", () => claimAttendanceReward(reward.day));
-      elements.attendanceList.append(button);
-    }
+      return {
+        className: `game-card${claimed ? " claimed" : ""}`,
+        disabled: !unlocked || claimed,
+        html: `
+          <span class="card-icon">${claimed ? "✔" : unlocked ? "🎁" : "🔒"}</span>
+          <span>
+            <span class="card-title">${reward.day}일차${reward.isFinal ? " (마지막)" : ""}</span>
+            <span class="card-meta">${reward.label}</span>
+          </span>
+          <span class="card-cost">${claimed ? "완료" : unlocked ? "받기" : "대기"}</span>
+        `,
+      };
+    }, (reward) => claimAttendanceReward(reward.day));
   }
 
   const attendanceQuickBtn = document.querySelector('.quick-menu-btn[data-quick="attendance"]');

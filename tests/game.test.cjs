@@ -312,3 +312,23 @@ test('saved buffs and queues reload, offline production ignores timed buffs, res
     resetGame(); assert.equal(state.consumed, 0); assert.equal(state.boosterMultiplierCharges, 0);
     assert.equal(state.activeBoosterRecipeBonus, 0); assert.equal(state.permanentBoosterDurationSeconds, 0);`);
 });
+
+test('reward lists keep the same button nodes across repeated renders so presses are not dropped', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.attendance.count = 7; state.dailyProgress.click = 30;
+    renderAttendance(); renderMissions();`);
+  for (const selector of ['#attendanceList', '#missionList', '#missionDialogList']) {
+    const list = g.node(selector);
+    const first = list.children[0];
+    g.run('renderAttendance(); renderMissions();'); // 게임 루프의 300ms 주기 렌더링
+    assert.equal(list.children[0], first, `${selector} button must not be replaced`);
+    assert.equal(first.disabled, false);
+  }
+  g.node('#attendanceList').children[0].emit('click');
+  g.node('#missionDialogList').children[0].emit('click');
+  g.run(`assert.equal(state.attendance.claimedDays[1], true); assert.equal(state.rice, 30);
+    assert.equal(state.dailyClaimed.dailyClick, true); assert.equal(state.boosterCount, 1);
+    renderAttendance(); renderMissions();`);
+  assert.equal(g.node('#attendanceList').children[0].disabled, true);
+  assert.equal(g.node('#missionList').children[0].disabled, true);
+});
