@@ -236,7 +236,7 @@ h2 {
 .stat-pill {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr;
+  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; /* 보유 쌀알 | 초당 | 클릭당 | 비료 */
   align-items: center;
   min-width: 0;
   padding: 14px 10px;
@@ -297,58 +297,6 @@ h2 {
   width: 1px;
   margin: 4px 0;
   background: rgba(109, 75, 18, 0.25);
-}
-
-.booster-widget {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-}
-
-.booster-box {
-  display: grid;
-  grid-template-columns: 84px minmax(32px, auto);
-  grid-template-areas: "icon count" "label label";
-  align-content: center;
-  align-items: center;
-  justify-items: center;
-  gap: 4px 8px;
-  width: max-content;
-  height: 100%;
-  padding: 2px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  text-align: center;
-}
-
-.booster-box:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.booster-box-icon {
-  grid-area: icon;
-  width: 84px;
-  height: 84px;
-  object-fit: contain;
-}
-
-.booster-box-label {
-  grid-area: label;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.booster-box-count {
-  grid-area: count;
-  justify-self: start;
-  font-size: 18px;
-  color: var(--brown);
-  white-space: nowrap;
 }
 
 .booster-status-caption {
@@ -1985,16 +1933,13 @@ body {
   }
 }
 
-/* 좁은 화면에서는 확대된 지표와 비료가 겹치지 않도록 줄바꿈 */
+/* 좁은 화면에서는 지표 4칸(보유/초당/클릭당/비료)이 한 줄에 들어가도록 여백 축소, 라벨 줄바꿈 허용 */
 @media (max-width: 700px) {
   .hero-stats {
     flex-wrap: wrap;
   }
   .hero-stats .stat-pill {
     flex: 1 1 100%;
-  }
-  .hero-stats .booster-widget {
-    margin-left: auto;
   }
   .hero-stats .stat-cell {
     padding: 0 4px;
@@ -2005,6 +1950,31 @@ body {
   .hero-stats .stat-cell-label {
     white-space: normal;
     word-break: keep-all;
+  }
+}
+
+/* 휴대폰 폭: 아이콘을 라벨 위로 올려 4칸 모두 값이 칸 안에 들어가도록 */
+@media (max-width: 460px) {
+  .hero-stats .stat-pill {
+    padding: 10px 4px;
+  }
+  .hero-stats .stat-cell {
+    padding: 0 2px;
+  }
+  .hero-stats .stat-cell-head {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .hero-stats .stat-icon-circle,
+  .hero-stats .stat-icon-circle img {
+    width: 28px;
+    height: 28px;
+  }
+  .hero-stats .stat-cell-label {
+    font-size: 11px;
+  }
+  .hero-stats .stat-cell-value {
+    font-size: clamp(14px, 4.4vw, 20px);
   }
 }
 
@@ -2048,19 +2018,6 @@ body {
   outline-offset: 3px;
 }
 
-.booster-box-label {
-  font-size: 15px;
-  font-weight: 900;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.hero-stats .booster-box-count {
-  font-size: 24px;
-  font-weight: 1000;
-  color: var(--text);
-}
-
 .bottom-nav .nav-btn {
   width: 100%;
   min-width: 0;
@@ -2086,12 +2043,6 @@ body {
   }
   .fertilizer-button {
     flex: 0 0 104px;
-  }
-}
-
-@media (max-width: 460px) {
-  .booster-box-label {
-    font-size: 12px;
   }
 }
 
