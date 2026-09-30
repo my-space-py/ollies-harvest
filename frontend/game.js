@@ -11,6 +11,17 @@ const API_BASE_URL =
 const OLLIE_HARVEST_IMAGE = "./assets/images/characters/ollie_harvest.png";
 const OLLIE_LEVEL_IMAGE_DIR = "./assets/images/characters";
 
+// 이 페이지가 어느 계정의 진행을 들고 있는지 고정한다. 다른 탭에서 다른 계정으로 로그인(또는 로그아웃)해
+// localStorage의 currentUser가 바뀌면, 이 탭은 더 이상 저장하지 않는다 (남의 계정 저장을 덮어쓰지 않도록).
+let sessionUserId = getCurrentUser()?.id ?? null;
+// 서버 동기화 상태: idle(아직 시작 안 함) | pending(불러오는 중) | done(성공/서버 저장 없음) | failed(연결 실패)
+// 서버 데이터를 확인하기 전에 로컬 상태를 올리면 서버의 최신 진행을 덮어쓸 수 있어, done일 때만 서버에 저장한다.
+let serverSyncStatus = "idle";
+let pushAfterSync = false;
+// 서버 확인 전(불러오는 중·연결 실패)에 로컬에 저장한 진행은 "미확인"으로 표시해 둔다.
+// 미확인 로컬은 저장 시각이 최신이어도 서버보다 앞선다는 보장이 없어, 다음 동기화 때 진행량으로 비교한다.
+let localSaveUnverified = false;
+
 // ----------------------------------------------------------------------------
 // 소비량 보상 트랙(통계 화면 전용). 게임 LV 기준/보상과 별개로 유지합니다.
 // ----------------------------------------------------------------------------
@@ -218,6 +229,7 @@ function normalizeState(saved) {
     }
   }
   delete merged.popularity;
+  delete merged.unverifiedLocal; // 로컬 저장 전용 표시 (saveState 참고)
   // 이미 활성화된 구버전 버프도 현재 고정 배율로 정규화하되 종료 시각은 보존합니다.
   for (const recipe of RECIPES) {
     if (recipe.buff) merged.buffs[`${recipe.buff.type}Multiplier`] = recipe.buff.multiplier;
@@ -270,43 +282,85 @@ function loadState() {
   const raw = localStorage.getItem(getStorageKey());
   if (!raw) return cloneInitialState();
   try {
-    const parsed = normalizeState(JSON.parse(raw));
+    const saved = JSON.parse(raw);
+    const parsed = normalizeState(saved);
     hasLocalSave = true;
+    localSaveUnverified = Boolean(saved.unverifiedLocal);
     return parsed;
   } catch {
     return cloneInitialState();
   }
 }
 
+// 이 탭이 들고 있는 계정과 지금 로그인된 계정이 다르면(다른 탭에서 계정 전환/로그아웃) true
+function isSessionUserChanged() {
+  if (sessionUserId == null) return false;
+  const user = getCurrentUser();
+  return !user || user.id !== sessionUserId;
+}
+
+// 서버 저장을 쓸지 판단. 보통은 저장 시각이 더 최신인 쪽. 로컬이 미확인이면(서버 확인 없이 저장됨)
+// 시각은 믿을 수 없으므로 진행량(누적 소비량 → 누적 수확량)이 서버가 같거나 많으면 서버를 쓴다.
+function isServerSaveAhead(serverState) {
+  if (!hasLocalSave) return true;
+  if (localSaveUnverified) {
+    const serverConsumed = serverState.consumed || 0;
+    if (serverConsumed !== state.consumed) return serverConsumed > state.consumed;
+    return (serverState.totalHarvested || 0) >= state.totalHarvested;
+  }
+  return (serverState.lastSavedAt || 0) > (state.lastSavedAt || 0);
+}
+
 async function syncFromServer() {
   const user = getCurrentUser();
-  if (!user) return;
+  if (!user || isSessionUserChanged()) return;
+  serverSyncStatus = "pending";
   try {
     const res = await fetch(`${API_BASE_URL}/save?user_id=${user.id}`);
-    if (!res.ok) return;
-    const payload = await res.json();
-    const serverState = payload.data;
-    const localTimestamp = hasLocalSave ? state.lastSavedAt || 0 : 0;
-    if (serverState && (serverState.lastSavedAt || 0) > localTimestamp) {
-      state = normalizeState(serverState);
-      stopRiceTween();
-      hasLocalSave = true;
-      checkGameLevelUp();
-      checkMilestones();
-      render();
+    if (res.status === 404) {
+      serverSyncStatus = "done"; // 서버에 저장이 아직 없음 → 로컬 진행을 올려도 됨
+    } else if (!res.ok) {
+      throw new Error("save fetch failed");
+    } else {
+      const payload = await res.json();
+      const serverState = payload.data;
+      if (serverState && isServerSaveAhead(serverState)) {
+        state = normalizeState(serverState);
+        stopRiceTween();
+        hasLocalSave = true;
+        checkGameLevelUp();
+        checkMilestones();
+        render();
+      }
+      serverSyncStatus = "done";
     }
+    localSaveUnverified = false;
   } catch {
-    // 서버 연결 실패 시 로컬 데이터로 계속 진행
+    // 서버 연결 실패 시 로컬 데이터로 계속 진행. 서버 저장은 다음 저장 때 동기화를 다시 시도한 뒤에 한다.
+    serverSyncStatus = "failed";
+    return;
+  }
+  if (pushAfterSync) {
+    pushAfterSync = false;
+    pushToServer();
   }
 }
 
 function pushToServer() {
   const user = getCurrentUser();
-  if (!user) return;
+  if (!user || isSessionUserChanged()) return;
+  if (serverSyncStatus === "pending" || serverSyncStatus === "failed") {
+    // 서버 진행을 아직 확인하지 못함 → 확인이 끝난 뒤에 저장 (실패했었다면 다시 확인)
+    pushAfterSync = true;
+    if (serverSyncStatus === "failed") syncFromServer();
+    return;
+  }
   fetch(`${API_BASE_URL}/save`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id: user.id, data: state }),
+    // 페이지를 닫거나 앱을 전환할 때(beforeunload / visibilitychange) 보낸 요청도 끝까지 전송되도록
+    keepalive: true,
   }).catch(() => {});
 }
 
@@ -486,8 +540,14 @@ if (elements.friendRequestForm) {
 }
 
 function saveState(silent = false) {
-  state.lastSavedAt = Date.now();
-  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  if (sessionUserId == null) sessionUserId = getCurrentUser()?.id ?? null;
+  if (isSessionUserChanged()) return; // 다른 계정의 로컬/서버 저장을 덮어쓰지 않음
+  // 서버는 lastSavedAt이 더 작은(오래된) 저장을 무시하므로 항상 증가시킨다.
+  // (다른 기기의 시계가 앞서 있어 불러온 값이 지금보다 커도 이 기기의 저장이 거부되지 않게)
+  state.lastSavedAt = Math.max(Date.now(), (state.lastSavedAt || 0) + 1);
+  if (serverSyncStatus === "pending" || serverSyncStatus === "failed") localSaveUnverified = true;
+  const localCopy = localSaveUnverified ? { ...state, unverifiedLocal: true } : state;
+  localStorage.setItem(getStorageKey(), JSON.stringify(localCopy));
   pushToServer();
   if (!silent) showToast("저장 완료");
 }
@@ -2392,6 +2452,12 @@ window.addEventListener("beforeunload", () => saveState(true));
 // 휴대폰은 앱 전환·홈 버튼 때 beforeunload가 오지 않을 수 있어, 화면이 가려질 때도 저장
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") saveState(true);
+});
+
+// 다른 탭에서 로그인 계정이 바뀌거나 로그아웃하면 이 탭은 저장을 멈추고 다시 불러온다
+// (로그인 정보가 없으면 index.html이 로그인 화면으로 보냄)
+window.addEventListener("storage", (event) => {
+  if (event.key === "currentUser" && isSessionUserChanged()) location.reload();
 });
 
 setInterval(() => saveState(true), 15000);

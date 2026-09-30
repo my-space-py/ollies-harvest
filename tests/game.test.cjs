@@ -315,7 +315,7 @@ test('saved buffs and queues reload, offline production ignores timed buffs, res
     assert.equal(getPerSecond(state, {ignoreTimedBuffs: true}), 1);`);
   g.advance(10000);
   g.run(`const saved = JSON.parse(localStorage.getItem(getStorageKey()));
-    state = normalizeState(saved); assert.equal(state.rice, saved.rice + 10);
+    state = normalizeState(saved); assert.ok(Math.abs(state.rice - (saved.rice + (Date.now() - saved.lastSavedAt) / 1000)) < 1e-6); // 자동 1g/s × 경과초
     resetGame(); assert.equal(state.consumed, 0); assert.equal(state.boosterMultiplierCharges, 0);
     assert.equal(state.activeBoosterRecipeBonus, 0); assert.equal(state.permanentBoosterDurationSeconds, 0);`);
 });
@@ -714,4 +714,89 @@ test('toasts of the same kind merge while waiting: many LV-ups become one, many 
   assert.deepEqual(texts(), ['게임 LV.4 달성! (LV.2~4)', '"능숙한 농부"']);
   g.advance(2200 + 700); g.advance(180);
   assert.deepEqual(texts(), ['소비 마일스톤 4개 달성!', '1kg · 비료 부스터 +1', '5kg · 쌀알 +1kg', '10kg · 비료 부스터 +2', '외 1개']);
+});
+
+test('server save uses keepalive so saves sent while the page closes are not cancelled', () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 3 }));
+  g.run(`state = cloneInitialState(); saveState(true);`);
+  const put = g.requests.find(r => r.options && r.options.method === 'PUT');
+  assert.ok(put);
+  assert.equal(put.options.keepalive, true);
+});
+
+test('a tab stops saving once another tab logs into a different account (no overwriting that account)', () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 1 }));
+  g.run(`state = cloneInitialState(); state.rice = 111; saveState(true);`);
+  assert.equal(JSON.parse(g.stored.get('ollies-harvest-save-v2:1')).rice, 111);
+  const count = g.requests.length;
+  g.stored.set('currentUser', JSON.stringify({ id: 2 })); // 다른 탭에서 계정 2로 로그인
+  g.run(`state.rice = 999; saveState(true); assert.equal(isSessionUserChanged(), true);`);
+  assert.equal(g.requests.length, count, 'no PUT for the other account');
+  assert.equal(g.stored.has('ollies-harvest-save-v2:2'), false);
+  assert.equal(JSON.parse(g.stored.get('ollies-harvest-save-v2:1')).rice, 111);
+});
+
+test('saves wait for the initial server load, then push; a failed load is retried before any push', async () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 5 }));
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  // 1) 불러오는 중에는 PUT 하지 않고, 서버 진행이 더 최신이면 그걸 받은 뒤 올린다
+  g.run(`var resolveGet; fetch = (url, options) => {
+    requests.push({ url, options });
+    if (!options) return new Promise(r => { resolveGet = r; });
+    return Promise.resolve({ ok: true, status: 200 });
+  };
+  var requests = []; state = cloneInitialState(); syncFromServer(); saveState(true);`);
+  assert.equal(g.run(`requests.filter(r => r.options).length`), 0, 'no PUT while server save is loading');
+  g.run(`resolveGet({ ok: true, status: 200, json: async () => ({ data: { ...cloneInitialState(), rice: 5000, consumed: 1200, lastSavedAt: Date.now() + 1 } }) });`);
+  await flush(); await flush();
+  assert.equal(g.run(`state.consumed`), 1200);
+  assert.equal(g.run(`JSON.parse(requests.find(r => r.options).options.body).data.consumed`), 1200);
+  // 2) 서버 연결 실패 후 저장하면 먼저 다시 불러오고, 성공하면 그때 올린다
+  g.run(`requests = []; var fail = true; fetch = (url, options) => {
+    requests.push({ url, options });
+    if (!options) return fail ? Promise.reject(new Error('down')) : Promise.resolve({ ok: false, status: 404 });
+    return Promise.resolve({ ok: true, status: 200 });
+  }; syncFromServer();`);
+  await flush();
+  assert.equal(g.run(`serverSyncStatus`), 'failed');
+  g.run(`fail = false; saveState(true);`);
+  assert.equal(g.run(`requests.filter(r => r.options).length`), 0);
+  await flush(); await flush();
+  assert.equal(g.run(`serverSyncStatus`), 'done');
+  assert.equal(g.run(`requests.filter(r => r.options && r.options.method === 'PUT').length`), 1);
+});
+
+test('a local save written before the server check is "unverified": on the next sync the side with more progress wins', async () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 8 }));
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  // 서버 연결 실패 중 저장 → 로컬에 미확인 표시
+  g.run(`fetch = (url, options) => options ? Promise.resolve({ ok: true, status: 200 }) : Promise.reject(new Error('down'));
+    state = cloneInitialState(); syncFromServer();`);
+  await flush();
+  g.run(`saveState(true);`);
+  assert.equal(JSON.parse(g.stored.get('ollies-harvest-save-v2:8')).unverifiedLocal, true);
+  // 다시 불러오면 표시는 state에 들어가지 않고, 시각이 최신이어도 진행이 많은 서버를 씀
+  g.run(`state = loadState(); assert.equal(state.unverifiedLocal, undefined); assert.equal(localSaveUnverified, true);
+    assert.equal(isServerSaveAhead({ consumed: 5000, lastSavedAt: 1 }), true);
+    state.consumed = 25000; assert.equal(isServerSaveAhead({ consumed: 5000, lastSavedAt: Date.now() + 1 }), false);`);
+  // 서버 확인이 끝나면 표시가 사라지고 이후 로컬 저장은 일반 저장
+  g.run(`fetch = () => Promise.resolve({ ok: false, status: 404 }); syncFromServer();`);
+  await flush();
+  g.run(`assert.equal(localSaveUnverified, false); saveState(true);`);
+  assert.equal(JSON.parse(g.stored.get('ollies-harvest-save-v2:8')).unverifiedLocal, undefined);
+});
+
+test('lastSavedAt always increases, even within the same millisecond or after loading a save stamped in the future', () => {
+  const g = createGame();
+  g.stored.set('currentUser', JSON.stringify({ id: 4 }));
+  g.run(`state = cloneInitialState(); saveState(true); const a = state.lastSavedAt;
+    saveState(true); assert.equal(state.lastSavedAt, a + 1); // 같은 시각 연속 저장
+    state.lastSavedAt = Date.now() + 600000; saveState(true); // 다른 기기 시계가 10분 앞선 저장을 불러온 경우
+    assert.equal(state.lastSavedAt, Date.now() + 600001);`);
+  const bodies = g.requests.filter(r => r.options && r.options.method === 'PUT').map(r => JSON.parse(r.options.body).data.lastSavedAt);
+  assert.ok(bodies.every((v, i) => i === 0 || v > bodies[i - 1]), bodies.join(','));
 });

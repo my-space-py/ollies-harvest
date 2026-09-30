@@ -4,8 +4,8 @@ import string
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import and_, or_, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import and_, func, or_, text, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
@@ -112,19 +112,39 @@ def get_save(user_id: int, db: Session = Depends(get_db)):
     return schemas.SaveResponse(user_id=save.user_id, data=json.loads(save.data))
 
 
+def _update_if_not_older(db: Session, user_id: int, data_json: str, saved_at) -> int:
+    """저장된 lastSavedAt보다 오래되지 않은 경우에만 덮어쓴다 (조건 확인과 갱신을 한 문장으로 처리해
+    동시에 들어온 요청 사이에서도 안전). 반환값: 갱신된 행 수."""
+    query = update(models.GameSave).where(models.GameSave.user_id == user_id)
+    if saved_at is not None:
+        stored_at = func.coalesce(func.json_extract(models.GameSave.data, "$.lastSavedAt"), 0)
+        query = query.where(stored_at <= saved_at)
+    return db.execute(query.values(data=data_json)).rowcount
+
+
 @app.put("/save", response_model=schemas.SaveResponse)
 def put_save(payload: schemas.SaveRequest, db: Session = Depends(get_db)):
-    save = db.query(models.GameSave).filter(models.GameSave.user_id == payload.user_id).first()
+    # 프론트는 저장 요청을 응답을 기다리지 않고 연달아 보내므로 도착 순서가 뒤바뀔 수 있다.
+    # 늦게 도착한 오래된 저장(lastSavedAt이 더 작음)이 최신 진행을 덮어쓰지 않도록 무시한다.
     data_json = json.dumps(payload.data)
+    saved_at = payload.data.get("lastSavedAt")
+    if not isinstance(saved_at, (int, float)) or isinstance(saved_at, bool):
+        saved_at = None  # 시각 정보가 없으면 예전처럼 무조건 덮어씀
 
-    if save:
-        save.data = data_json
-    else:
-        save = models.GameSave(user_id=payload.user_id, data=data_json)
-        db.add(save)
-
+    updated = _update_if_not_older(db, payload.user_id, data_json, saved_at)
+    if not updated:
+        exists = db.query(models.GameSave.id).filter(models.GameSave.user_id == payload.user_id).first()
+        if not exists:
+            db.add(models.GameSave(user_id=payload.user_id, data=data_json))
+            try:
+                db.commit()
+            except IntegrityError:
+                # 같은 계정의 첫 저장이 동시에 들어와 다른 요청이 먼저 행을 만든 경우
+                db.rollback()
+                _update_if_not_older(db, payload.user_id, data_json, saved_at)
     db.commit()
-    db.refresh(save)
+
+    save = db.query(models.GameSave).filter(models.GameSave.user_id == payload.user_id).first()
     return schemas.SaveResponse(user_id=save.user_id, data=json.loads(save.data))
 
 
