@@ -364,12 +364,15 @@ function pushToServer() {
   }).catch(() => {});
 }
 
+const RANKING_LIMIT = 50; // 주간 랭킹에 보여줄 최대 순위
+
 async function loadLeaderboard() {
   if (!elements.rankingList) return;
   elements.rankingList.innerHTML = '<p class="screen-placeholder">불러오는 중...</p>';
   const user = getCurrentUser();
   try {
-    const url = user ? `${API_BASE_URL}/leaderboard/weekly?user_id=${user.id}` : `${API_BASE_URL}/leaderboard/weekly`;
+    const query = `limit=${RANKING_LIMIT}${user ? `&user_id=${user.id}` : ""}`;
+    const url = `${API_BASE_URL}/leaderboard/weekly?${query}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("leaderboard request failed");
     const payload = await res.json();
@@ -568,7 +571,7 @@ function getInnerUpgradeCost(tool, config) {
 function getNextTierCost(tool, config) {
   const nextTier = tool.tier + 1;
   if (nextTier > config.tierCount) return null;
-  return Math.floor(config.costMultiplierPerTier * tierBasePower(nextTier));
+  return Math.floor(config.tierCostMultiplier * tierBasePower(nextTier));
 }
 
 function isNextTierUnlocked(tool, config) {
@@ -1213,10 +1216,15 @@ function checkEventState(now = Date.now()) {
   }
 }
 
-// 받는 순간 보유 쌀알이 rewardMultiplier배가 되도록 차액을 지급 (최소 minRewardRice)
+// 받는 순간 보유 쌀알이 rewardMultiplier배가 되도록 차액을 지급 (최소 minRewardRice).
+// 상한은 자동 수확 maxRewardSeconds초치 — 모아 둔 쌀알이 아니라 진행 단계에 비례하게
+function getEventMaxReward(targetState = state) {
+  return Math.floor(getPerSecond(targetState, { ignoreTimedBuffs: true }) * EVENT_CONFIG.maxRewardSeconds);
+}
+
 function getEventReward(targetState = state) {
   const bonus = Math.floor(targetState.rice * (EVENT_CONFIG.rewardMultiplier - 1));
-  return Math.max(EVENT_CONFIG.minRewardRice, bonus);
+  return Math.max(EVENT_CONFIG.minRewardRice, Math.min(bonus, getEventMaxReward(targetState)));
 }
 
 function startEvent() {
@@ -1278,7 +1286,7 @@ function handleEventCardClick() {
 function getEventView() {
   const ev = state.event;
   const def = getEventDef(ev.id);
-  const rewardText = `보상: 보유 쌀알 ×${EVENT_CONFIG.rewardMultiplier}`;
+  const rewardText = `보상: 보유 쌀알 ×${EVENT_CONFIG.rewardMultiplier} (최대 ${formatWeight(getEventMaxReward())} = 자동 수확 ${EVENT_CONFIG.maxRewardSeconds / 60}분치)`;
   const card = (icon, title, meta, note, cost, disabled, extraClass = "") => ({
     className: `game-card event-card${extraClass}`,
     disabled,

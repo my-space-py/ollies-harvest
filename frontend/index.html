@@ -303,7 +303,7 @@
       <div class="panel-section screen-inner">
         <div class="section-title">
           <h2>랭킹</h2>
-          <span>주간 누적 수확량 (TOP 20)</span>
+          <span>주간 누적 수확량 (TOP 50)</span>
         </div>
         <p id="myWeeklyRank" class="my-rank-line"></p>
         <div id="rankingList" class="card-list"></div>
@@ -404,14 +404,14 @@
     <dialog id="eventDialog" class="quick-dialog">
       <button type="button" class="modal-close-btn" data-close="eventDialog" aria-label="닫기">×</button>
       <h2>이벤트</h2>
-      <p class="dialog-subtitle">바로 할 수 있는 깜짝 과제 · 달성하면 보유 쌀알이 1.5배!</p>
+      <p class="dialog-subtitle">바로 할 수 있는 깜짝 과제 · 달성하면 보유 쌀알이 1.5배! (최대 자동 수확 10분치)</p>
       <div class="modal-scroll-body">
         <!-- 이벤트 카드 1장 (game.js renderEvent). 카드 전체를 눌러 시작 / 다시 도전 / 보상 받기 -->
         <div id="eventList" class="card-list"></div>
         <button id="eventSkipButton" type="button" class="event-skip-btn" hidden>다른 이벤트로 바꾸기</button>
         <p class="event-help">
           카드를 눌러 이벤트를 시작하세요. 시간 제한이 있는 이벤트는 시작한 순간부터 시간이 흘러요.
-          보상은 <strong>받는 순간의 보유 쌀알</strong> 기준이라, 쌀알을 모아 두었다가 받으면 더 많이 받아요.
+          보상은 <strong>받는 순간의 보유 쌀알</strong> 기준이에요. 단, 한 번에 받을 수 있는 양은 <strong>자동 수확 10분치</strong>까지예요.
           보상을 받으면 3분 뒤 새 이벤트가 열립니다.
         </p>
       </div>
@@ -440,7 +440,7 @@
             <h3>⬆ 2. 장비 강화 (업그레이드 탭)</h3>
             <ul>
               <li><b>내부 강화</b>: 쌀알로 지금 장비를 한 단계씩 강화해요.</li>
-              <li><b>다음 티어</b>: 게임 LV이 오르면 더 좋은 장비로 바꿀 수 있어요. 수확량이 크게 늘어나요.</li>
+              <li><b>다음 티어</b>: 게임 LV이 오르면 더 좋은 장비로 바꿀 수 있어요. 교체 비용이 커서 쌀알을 모아야 하지만, 수확량이 크게 늘어나요.</li>
             </ul>
           </section>
 
@@ -471,7 +471,7 @@
             <ul>
               <li><b>오늘의 미션</b>: 매일 자정에 초기화되는 4가지 과제</li>
               <li><b>출석</b>: 접속한 날마다 한 칸씩, 7일 동안 보상</li>
-              <li><b>이벤트</b>: 바로 할 수 있는 깜짝 과제. 달성하면 보유 쌀알이 1.5배!</li>
+              <li><b>이벤트</b>: 바로 할 수 있는 깜짝 과제. 달성하면 보유 쌀알이 1.5배! (최대 자동 수확 10분치)</li>
               <li><b>통계 탭</b>의 소비 마일스톤도 소비량을 채우면 자동으로 보상이 지급돼요.</li>
             </ul>
           </section>
@@ -529,8 +529,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./js/balance-config.js?v=9"></script>
-    <script src="./game.js?v=40"></script>
+    <script src="./js/balance-config.js?v=10"></script>
+    <script src="./game.js?v=41"></script>
     <script>
       document.getElementById("logoutButton").addEventListener("click", () => {
         saveState(true); // 로그인 정보를 지우기 전에 마지막 진행을 저장 (지운 뒤에는 저장하지 않음)

@@ -182,7 +182,7 @@ def _extract_weekly_harvest(data: dict) -> float:
 
 
 @app.get("/leaderboard/weekly", response_model=schemas.WeeklyLeaderboardResponse)
-def get_weekly_leaderboard(limit: int = 20, user_id: int | None = None, db: Session = Depends(get_db)):
+def get_weekly_leaderboard(limit: int = 50, user_id: int | None = None, db: Session = Depends(get_db)):
     rows = (
         db.query(models.GameSave, models.User)
         .join(models.User, models.GameSave.user_id == models.User.id)

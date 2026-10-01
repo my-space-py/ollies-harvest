@@ -350,6 +350,7 @@ test('random event: ready -> start -> complete -> reward makes rice x1.5, then c
     startEvent(); assert.equal(state.event.status, 'active');
     advanceEvent('click'); assert.equal(state.event.progress, 0); // 다른 종류 행동은 무시
     state.boosterCount = 1; useBooster(); assert.equal(state.event.status, 'complete');
+    state.autoTool = { tier: 5, level: 1 }; // 자동 수확 10분치 상한이 5,000g보다 크도록
     state.rice = 10000; claimEventReward(); assert.equal(state.rice, 15000);
     assert.equal(state.event.status, 'claimed'); claimEventReward(); assert.equal(state.rice, 15000); // 중복 수령 방지
     checkEventState(); assert.equal(state.event.status, 'claimed');`);
@@ -368,6 +369,30 @@ test('timed click event fails after its limit, can be retried, and small balance
     startEvent(); assert.equal(state.event.status, 'active'); assert.equal(state.event.progress, 0);
     for (let i = 0; i < 20; i++) advanceEvent('click'); assert.equal(state.event.status, 'complete');
     state.rice = 10; claimEventReward(); assert.equal(state.rice, 10 + EVENT_CONFIG.minRewardRice);`);
+});
+
+test('event reward is capped at 10 minutes of auto harvest, so hoarding rice cannot snowball', () => {
+  createGame().run(`state = cloneInitialState();
+    state.autoTool = { tier: 3, level: 1 };
+    const cap = Math.floor(getPerSecond(state, { ignoreTimedBuffs: true }) * EVENT_CONFIG.maxRewardSeconds);
+    assert.equal(cap, Math.floor(4.5 ** 2 * 600));
+    state.buffs.autoUntil = Date.now() + 60000; state.buffs.autoMultiplier = 3; // 타임 버프는 상한 계산에서 제외
+    state.boosterEndTime = Date.now() + 60000;
+    state.rice = 1e12; state.event = { id: 'clickRush', status: 'complete', progress: 20, startedAt: 0, nextAt: 0 };
+    claimEventReward(); assert.equal(state.rice, 1e12 + cap);
+    state.rice = 1000; assert.equal(getEventReward(), 500); // 상한보다 작으면 그대로 1.5배`);
+});
+
+test('changing to the next tier costs tierCostMultiplier x its base power, separately from inner upgrades', () => {
+  createGame().run(`resetReady();
+    state.level = 3; state.clickTool = { tier: 2, level: 4 }; state.autoTool = { tier: 2, level: 4 };
+    assert.equal(getNextTierCost(state.clickTool, TOOL_CONFIG.click), Math.floor(4000 * 4.5 ** 2));
+    assert.equal(getNextTierCost(state.autoTool, TOOL_CONFIG.auto), Math.floor(3000 * 4.5 ** 2));
+    assert.equal(getInnerUpgradeCost(state.autoTool, TOOL_CONFIG.auto), Math.floor(15 * 4.5 * 1.45 ** 3)); // 내부 강화 공식은 그대로
+    const before = state.rice; buyNextTier('auto');
+    assert.deepEqual({ ...state.autoTool }, { tier: 3, level: 1 });
+    assert.equal(state.rice, before - Math.floor(3000 * 4.5 ** 2));
+    state.rice = 0; buyNextTier('click'); assert.equal(state.clickTool.tier, 2); // 쌀 부족 시 그대로`);
 });
 
 test('event skip only works before starting or after failing; old saves without event data get a new event', () => {

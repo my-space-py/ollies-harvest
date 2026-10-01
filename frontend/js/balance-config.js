@@ -47,21 +47,26 @@ const TOOL_TIER_NAMES = {
   ],
 };
 
-// BasePower(Tier) = 5^(Tier-1) — 기획서 7·8장 표와 동일
+// BasePower(Tier) = 4.5^(Tier-1)
+// (2026-10-01) 기획서의 5^(Tier-1)에서 낮춤. 고레벨일수록 영구 보너스·레시피 버프·비료가 곱으로 쌓여
+// LV3 이후 레벨당 0~2분이면 오르던 문제를, 티어 간 생산량 차이를 줄여 상쇄한다.
 function tierBasePower(tier) {
-  return 5 ** (tier - 1);
+  return 4.5 ** (tier - 1);
 }
 
+// 비용은 모두 tierBasePower에 비례 → 어느 티어에서든 "몇 분치 수입"으로 같은 노력이 든다.
 const TOOL_CONFIG = {
   click: {
     tierCount: 12,
-    costMultiplierPerTier: 20, // T1 Lv.1 업그레이드 비용 = 1 × 20 = 20
+    costMultiplierPerTier: 20, // 내부 강화 비용 기준: T1 Lv.1 → 2 = 1 × 20 = 20
+    tierCostMultiplier: 4000, // 다음 티어 교체 비용 = 4000 × 다음 티어 basePower (예전엔 내부 강화와 같은 20배라 사실상 공짜)
     innerLevelGrowth: 0.2, // 내부 Lv +1당 티어 기본생산량의 20%씩 선형 증가
     costGrowthPerLevel: 1.45, // 내부 업그레이드 비용은 매 레벨 45%씩 증가
   },
   auto: {
     tierCount: 12,
     costMultiplierPerTier: 15,
+    tierCostMultiplier: 3000,
     innerLevelGrowth: 0.2,
     costGrowthPerLevel: 1.45,
   },
@@ -332,9 +337,12 @@ const ATTENDANCE_REWARDS = [
 // type: 진행도를 올리는 행동 ('click' | 'friend' | 'boosterUse' | 'recipe' | 'upgrade')
 // timeLimitSeconds: 시작 후 제한 시간(초). 없으면 시간 제한 없음. 시간 초과 시 '다시 도전' 가능
 // 보상: 받는 순간 보유 쌀알이 rewardMultiplier배가 됨 (최소 minRewardRice 보장)
+//   단, 자동 수확 maxRewardSeconds초치(타임 버프 제외)를 넘지 않음 — 쌀알을 모아 둘수록 보상이 무한히
+//   커져 몇 분마다 보유량이 1.5배씩 불어나던 문제 방지 (2026-10-01)
 const EVENT_CONFIG = {
   rewardMultiplier: 1.5,
   minRewardRice: 100,
+  maxRewardSeconds: 600,
   cooldownSeconds: 180, // 보상 수령 후 다음 이벤트가 나올 때까지
 };
 
