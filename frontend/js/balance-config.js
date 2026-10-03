@@ -251,7 +251,7 @@ const CONSUMPTION_MILESTONES = [
 ];
 
 // 시연용 관리자 모드: 최종 제출 전 false로 변경하면 진입/지급 모두 비활성화.
-const ADMIN_MODE_ENABLED = true;
+const ADMIN_MODE_ENABLED = false;
 const ADMIN_CONFIG = {
   clickCount: 5,
   clickWindowMs: 3000,

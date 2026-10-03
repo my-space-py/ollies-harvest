@@ -1,6 +1,10 @@
+import hashlib
 import json
+import os
 import random
+import secrets
 import string
+from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,26 +73,40 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @app.post("/signup", response_model=schemas.UserResponse)
 def signup(payload: schemas.SignupRequest, db: Session = Depends(get_db)):
+    # bcrypt는 느리므로(수백 ms) DB 연결을 잡기 전에 계산한다. 연결을 쥔 채 해시하면 가입이 몰릴 때
+    # 연결 풀(최대 15개)이 바닥나 30초 대기 후 500 오류가 났다 (동시 가입 150건 중 105건 실패를 재현).
+    hashed_pw = pwd_context.hash(payload.password)
+
     existing = db.query(models.User).filter(models.User.username == payload.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="이미 사용 중인 아이디입니다.")
 
-    hashed_pw = pwd_context.hash(payload.password)
-    new_user = models.User(
-        username=payload.username,
-        nickname=payload.nickname,
-        hashed_password=hashed_pw,
-        friend_code=_generate_friend_code(db),
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+    for _ in range(3):
+        new_user = models.User(
+            username=payload.username,
+            nickname=payload.nickname,
+            hashed_password=hashed_pw,
+            friend_code=_generate_friend_code(db),
+        )
+        db.add(new_user)
+        try:
+            db.commit()
+        except IntegrityError:
+            # 같은 아이디가 동시에 가입했거나, 드물게 친구 코드가 동시에 겹친 경우
+            db.rollback()
+            if db.query(models.User.id).filter(models.User.username == payload.username).first():
+                raise HTTPException(status_code=400, detail="이미 사용 중인 아이디입니다.")
+            continue
+        db.refresh(new_user)
+        return new_user
+    raise HTTPException(status_code=500, detail="잠시 후 다시 시도해주세요.")
 
 
 @app.post("/login", response_model=schemas.UserResponse)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == payload.username).first()
+    # 느린 bcrypt 확인 전에 DB 연결을 풀에 돌려준다 (불러온 값은 그대로 남아 응답에 사용 가능)
+    db.close()
     if not user or not pwd_context.verify(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
     return user
@@ -126,6 +144,9 @@ def _update_if_not_older(db: Session, user_id: int, data_json: str, saved_at) ->
 def put_save(payload: schemas.SaveRequest, db: Session = Depends(get_db)):
     # 프론트는 저장 요청을 응답을 기다리지 않고 연달아 보내므로 도착 순서가 뒤바뀔 수 있다.
     # 늦게 도착한 오래된 저장(lastSavedAt이 더 작음)이 최신 진행을 덮어쓰지 않도록 무시한다.
+    # SQLite는 외래 키를 강제하지 않아, 없는 계정의 user_id로도 저장 행이 생겼다 (랭킹에 유령 행이 섞임)
+    if not db.query(models.User.id).filter(models.User.id == payload.user_id).first():
+        raise HTTPException(status_code=404, detail="계정을 찾을 수 없습니다.")
     data_json = json.dumps(payload.data)
     saved_at = payload.data.get("lastSavedAt")
     if not isinstance(saved_at, (int, float)) or isinstance(saved_at, bool):
@@ -148,29 +169,66 @@ def put_save(payload: schemas.SaveRequest, db: Session = Depends(get_db)):
     return schemas.SaveResponse(user_id=save.user_id, data=json.loads(save.data))
 
 
-@app.get("/leaderboard", response_model=schemas.LeaderboardResponse)
-def get_leaderboard(limit: int = 20, db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.GameSave, models.User)
-        .join(models.User, models.GameSave.user_id == models.User.id)
-        .all()
-    )
+# 주간 랭킹은 익명으로 보여준다: 실제 닉네임 대신 아래 이름 중 하나를 응답에 넣고,
+# 요청한 본인 행에만 isMe를 표시한다. (실제 닉네임은 랭킹 응답에 아예 포함하지 않음)
+WEEKLY_RANKING_LIMIT_MAX = 100
 
-    ranked = []
-    for save, user in rows:
-        try:
-            data = json.loads(save.data)
-        except (TypeError, ValueError):
-            continue
-        ranked.append({"nickname": user.nickname, "consumed": float(data.get("consumed") or 0)})
+RANKING_ALIASES = [
+    "홍길동", "개똥이", "철수", "영희", "돌쇠", "마당쇠", "갑돌이", "갑순이", "순돌이", "삼순이",
+    "말순이", "복순이", "덕구", "막둥이", "꺽정이", "춘향이", "몽룡이", "심청이", "흥부", "놀부",
+    "콩쥐", "팥쥐", "바우", "칠복이", "점순이", "판돌이", "언년이", "봉구", "만복이", "복동이",
+    "차돌이", "똘이", "꽃분이", "금순이", "옥분이", "봉순이", "길순이", "용팔이", "덕배", "만수",
+    "칠성이", "삼돌이", "귀남이", "복실이", "쇠돌이", "억쇠", "순덕이", "말똥이", "곱단이", "또순이",
+    "허수아비", "참새", "메뚜기", "우렁이", "미꾸라지", "개구리", "두루미", "황소", "누렁이", "바둑이",
+    "흰둥이", "까치", "제비", "올챙이", "반딧불이", "다람쥐", "고슴도치", "부엉이", "두더지", "청개구리",
+    "누룽지", "주먹밥", "인절미", "가래떡", "꿀떡", "송편", "백설기", "시루떡", "약과", "강정",
+    "볍씨", "모내기", "벼이삭", "논두렁", "새참", "막걸리", "쌀가마", "짚신", "멍석", "디딜방아",
+    "절구", "키질", "지게", "도롱이", "삽살개", "진돗개", "꼬꼬닭", "병아리", "오리", "거위",
+]
 
-    ranked.sort(key=lambda entry: entry["consumed"], reverse=True)
+ALIAS_SALT_PATH = Path(__file__).resolve().parent / "ranking_alias_salt.txt"
 
-    entries = [
-        schemas.LeaderboardEntry(rank=index + 1, nickname=entry["nickname"], consumed=entry["consumed"])
-        for index, entry in enumerate(ranked[:limit])
-    ]
-    return schemas.LeaderboardResponse(entries=entries)
+
+def _load_alias_salt() -> str:
+    """익명 이름을 정하는 비밀값. 코드만 보고 user_id → 익명 이름을 계산할 수 없도록 저장소 밖에 둔다.
+    환경변수 RANKING_ALIAS_SALT가 있으면 그 값을, 없으면 backend/ranking_alias_salt.txt를 쓴다(없으면 새로 만듦)."""
+    salt = os.environ.get("RANKING_ALIAS_SALT", "").strip()
+    if salt:
+        return salt
+    if ALIAS_SALT_PATH.exists():
+        salt = ALIAS_SALT_PATH.read_text(encoding="utf-8").strip()
+    if not salt:
+        salt = secrets.token_hex(16)
+        ALIAS_SALT_PATH.write_text(salt, encoding="utf-8")
+    return salt
+
+
+_ALIAS_SALT = _load_alias_salt()
+
+
+def _assign_weekly_aliases(user_ids, week_key: str) -> dict:
+    """주차별 익명 이름 {user_id: 이름}. 같은 주 안에서는 고정되고(순위가 바뀌어도 이름 유지) 주가 바뀌면 새로 섞인다.
+    이름이 겹치면 다음 빈 이름을 쓰고, 후보가 모두 쓰였으면 뒤에 번호를 붙인다."""
+    aliases = {}
+    taken = set()
+    count = len(RANKING_ALIASES)
+    # user_id 순서로 배정 → 새 계정이 생겨도 기존 사용자의 이번 주 이름은 바뀌지 않음
+    for user_id in sorted(user_ids):
+        digest = hashlib.sha256(f"{_ALIAS_SALT}:{week_key}:{user_id}".encode("utf-8")).digest()
+        start = int.from_bytes(digest[:4], "big") % count
+        alias = next(
+            (RANKING_ALIASES[(start + step) % count] for step in range(count)
+             if RANKING_ALIASES[(start + step) % count] not in taken),
+            None,
+        )
+        if alias is None:
+            number = 2
+            while f"{RANKING_ALIASES[start]}{number}" in taken:
+                number += 1
+            alias = f"{RANKING_ALIASES[start]}{number}"
+        taken.add(alias)
+        aliases[user_id] = alias
+    return aliases
 
 
 def _extract_weekly_harvest(data: dict) -> float:
@@ -182,39 +240,35 @@ def _extract_weekly_harvest(data: dict) -> float:
 
 
 @app.get("/leaderboard/weekly", response_model=schemas.WeeklyLeaderboardResponse)
-def get_weekly_leaderboard(limit: int = 50, user_id: int | None = None, db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.GameSave, models.User)
-        .join(models.User, models.GameSave.user_id == models.User.id)
-        .all()
-    )
+def get_weekly_leaderboard(limit: int = WEEKLY_RANKING_LIMIT_MAX, user_id: int | None = None, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, WEEKLY_RANKING_LIMIT_MAX))
+    # 계정이 있는 저장만 (예전에 생긴 계정 없는 저장 행은 제외)
+    saves = db.query(models.GameSave).join(models.User, models.GameSave.user_id == models.User.id).all()
 
     ranked = []
-    my_row = None
-    for save, user in rows:
+    for save in saves:
         try:
             data = json.loads(save.data)
         except (TypeError, ValueError):
             continue
-        harvest = _extract_weekly_harvest(data)
-        entry = {"user_id": user.id, "nickname": user.nickname, "weeklyHarvest": harvest}
-        ranked.append(entry)
-        if user_id is not None and user.id == user_id:
-            my_row = entry
+        ranked.append({"user_id": save.user_id, "weeklyHarvest": _extract_weekly_harvest(data)})
 
     ranked.sort(key=lambda entry: entry["weeklyHarvest"], reverse=True)
+    aliases = _assign_weekly_aliases([entry["user_id"] for entry in ranked], get_current_week_key())
 
-    entries = [
-        schemas.WeeklyLeaderboardEntry(rank=index + 1, nickname=entry["nickname"], weeklyHarvest=entry["weeklyHarvest"])
-        for index, entry in enumerate(ranked[:limit])
-    ]
+    def to_entry(rank: int, entry: dict) -> schemas.WeeklyLeaderboardEntry:
+        return schemas.WeeklyLeaderboardEntry(
+            rank=rank,
+            alias=aliases[entry["user_id"]],
+            weeklyHarvest=entry["weeklyHarvest"],
+            isMe=user_id is not None and entry["user_id"] == user_id,
+        )
 
-    my_entry = None
-    if my_row is not None:
-        my_rank = next((index + 1 for index, entry in enumerate(ranked) if entry["user_id"] == my_row["user_id"]), None)
-        if my_rank is not None:
-            my_entry = schemas.WeeklyLeaderboardEntry(rank=my_rank, nickname=my_row["nickname"], weeklyHarvest=my_row["weeklyHarvest"])
-
+    entries = [to_entry(index + 1, entry) for index, entry in enumerate(ranked[:limit])]
+    my_entry = next(
+        (to_entry(index + 1, entry) for index, entry in enumerate(ranked) if user_id is not None and entry["user_id"] == user_id),
+        None,
+    )
     return schemas.WeeklyLeaderboardResponse(entries=entries, myEntry=my_entry)
 
 

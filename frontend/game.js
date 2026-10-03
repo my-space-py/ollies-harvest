@@ -239,7 +239,7 @@ function normalizeState(saved) {
   const today = getLocalDateKey();
   if (merged.dailyDateKey !== today) {
     merged.dailyDateKey = today;
-    merged.dailyProgress = { click: 0, upgrade: 0, recipe: 0, boosterUse: 0 };
+    merged.dailyProgress = { ...initialState.dailyProgress }; // 쌀국수 일일 비료 카운터(noodleBooster)까지 함께 리셋
     merged.dailyClaimed = Object.fromEntries(DAILY_MISSIONS.map((mission) => [mission.id, false]));
   }
 
@@ -364,7 +364,12 @@ function pushToServer() {
   }).catch(() => {});
 }
 
-const RANKING_LIMIT = 50; // 주간 랭킹에 보여줄 최대 순위
+// 서버에서 받은 사용자 입력(닉네임 등)을 innerHTML에 넣을 때는 반드시 이스케이프 (저장형 XSS 방지)
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+const RANKING_LIMIT = 100; // 주간 랭킹에 보여줄 최대 순위 (서버 상한과 동일)
 
 async function loadLeaderboard() {
   if (!elements.rankingList) return;
@@ -382,10 +387,11 @@ async function loadLeaderboard() {
   }
 }
 
+// 랭킹은 익명: 서버가 실제 닉네임 대신 이번 주 익명 이름(alias)을 보내고, 내 행에만 isMe를 표시한다.
 function renderLeaderboard(entries, myEntry) {
   if (elements.myWeeklyRank) {
     elements.myWeeklyRank.textContent = myEntry
-      ? `내 순위 ${myEntry.rank}위 · 주간 수확량 ${formatWeight(myEntry.weeklyHarvest)}`
+      ? `내 순위 ${myEntry.rank}위 · 이번 주 내 이름 "${myEntry.alias}" · 주간 수확량 ${formatWeight(myEntry.weeklyHarvest)}`
       : "";
   }
 
@@ -393,16 +399,15 @@ function renderLeaderboard(entries, myEntry) {
     elements.rankingList.innerHTML = '<p class="screen-placeholder">아직 랭킹에 오른 플레이어가 없습니다.</p>';
     return;
   }
-  const currentUser = getCurrentUser();
   elements.rankingList.innerHTML = "";
   for (const entry of entries) {
     const div = document.createElement("div");
-    const isMe = currentUser && entry.nickname === currentUser.nickname;
+    const isMe = Boolean(entry.isMe);
     div.className = `game-card${isMe ? " claimed" : ""}`;
     div.innerHTML = `
       <span class="card-icon">${entry.rank <= 3 ? "🏆" : entry.rank}</span>
       <span>
-        <span class="card-title">${entry.nickname}${isMe ? " (나)" : ""}</span>
+        <span class="card-title">${escapeHtml(entry.alias)}${isMe ? " (나)" : ""}</span>
         <span class="card-meta">주간 누적 수확량</span>
       </span>
       <span class="card-cost">${formatWeight(entry.weeklyHarvest)}</span>
@@ -445,7 +450,7 @@ function renderFriendRequests(requests) {
     div.innerHTML = `
       <span class="card-icon">👤</span>
       <span>
-        <span class="card-title">${request.requester_nickname}</span>
+        <span class="card-title">${escapeHtml(request.requester_nickname)}</span>
         <span class="card-meta">친구 요청을 보냈어요</span>
       </span>
       <span class="friend-request-actions">
@@ -506,7 +511,7 @@ function renderFriends(friends) {
     div.innerHTML = `
       <span class="card-icon">${index + 1}</span>
       <span>
-        <span class="card-title">${friend.nickname}</span>
+        <span class="card-title">${escapeHtml(friend.nickname)}</span>
         <span class="card-meta">LV.${friend.gameLevel} ${friend.gameLevelTitle} · 주간 수확량 ${formatWeight(friend.weeklyHarvest)}</span>
       </span>
       <span class="card-cost">${formatWeight(friend.weeklyHarvest)}</span>
@@ -545,6 +550,7 @@ if (elements.friendRequestForm) {
 function saveState(silent = false) {
   if (sessionUserId == null) sessionUserId = getCurrentUser()?.id ?? null;
   if (isSessionUserChanged()) return; // 다른 계정의 로컬/서버 저장을 덮어쓰지 않음
+  catchUpAwayHarvest(); // 화면이 가려져 루프가 멈춘 동안의 수확을 먼저 반영 (가려진 채 닫혀도 보존)
   // 서버는 lastSavedAt이 더 작은(오래된) 저장을 무시하므로 항상 증가시킨다.
   // (다른 기기의 시계가 앞서 있어 불러온 값이 지금보다 커도 이 기기의 저장이 거부되지 않게)
   state.lastSavedAt = Math.max(Date.now(), (state.lastSavedAt || 0) + 1);
@@ -701,6 +707,40 @@ function gainRice(amount, options = {}) {
   state.rice += amount;
   state.totalHarvested += amount;
   state.weeklyHarvest += amount;
+}
+
+// ----------------------------------------------------------------------------
+// 화면이 가려진 동안(다른 탭·앱 전환, 휴대폰 화면 꺼짐)의 자동 수확
+// ----------------------------------------------------------------------------
+// 브라우저는 가려진 탭의 게임 루프(requestAnimationFrame)를 멈추고, 루프는 한 프레임 최대 0.25초만
+// 반영하므로 그 시간이 통째로 사라졌다(10초 가려짐 → 약 1초치만 수확). 페이지를 닫았다 오면 오프라인
+// 보상을 받는데 탭만 바꾸면 못 받던 것. 멈춘 시간을 오프라인 보상과 같은 규칙(타임 버프 제외,
+// 최대 24시간, 식혜 보너스)으로 채운다. 가려진 채 닫혀도 사라지지 않도록 저장 직전에도 채운다.
+const AWAY_GAP_SECONDS = 1; // 이보다 긴 프레임 간격은 "화면이 멈춰 있던 시간"으로 본다
+const AWAY_TOAST_MIN_SECONDS = 30;
+const awayHarvest = { gain: 0, seconds: 0 }; // 아직 알리지 않은 몫 (화면이 다시 보일 때 한 번에 알림)
+
+function catchUpAwayHarvest(now = performance.now()) {
+  const elapsed = (now - lastTick) / 1000;
+  if (!(elapsed > AWAY_GAP_SECONDS)) return false;
+  lastTick = now;
+  const seconds = Math.min(elapsed, OFFLINE_MAX_SECONDS);
+  const gain = getPerSecond(state, { ignoreTimedBuffs: true }) * seconds * (1 + (state.offlineBonus || 0));
+  if (gain > 0) {
+    state.rice += gain;
+    state.totalHarvested += gain;
+    awayHarvest.gain += gain;
+  }
+  awayHarvest.seconds += seconds;
+  return true;
+}
+
+function announceAwayHarvest() {
+  if (awayHarvest.seconds >= AWAY_TOAST_MIN_SECONDS && awayHarvest.gain >= 1) {
+    showToast(`쉬는 동안 올리가 수확했어요\n+${formatWeight(awayHarvest.gain)}`);
+  }
+  awayHarvest.gain = 0;
+  awayHarvest.seconds = 0;
 }
 
 function spendRice(amount) {
@@ -987,7 +1027,7 @@ function checkDailyAndWeeklyReset() {
   const today = getLocalDateKey();
   if (state.dailyDateKey !== today) {
     state.dailyDateKey = today;
-    state.dailyProgress = { click: 0, upgrade: 0, recipe: 0, boosterUse: 0 };
+    state.dailyProgress = { ...initialState.dailyProgress }; // 쌀국수 일일 비료 카운터(noodleBooster)까지 함께 리셋
     state.dailyClaimed = Object.fromEntries(DAILY_MISSIONS.map((mission) => [mission.id, false]));
   }
   const thisWeek = getISOWeekKey();
@@ -1631,7 +1671,8 @@ function renderStats() {
 
   const levelInfo = getGameLevelInfo(state.level);
   // 줄바꿈 앞 공백: 모바일에서 <br>을 숨겨 "LV.3 성실한 농부" 한 줄로 보여줄 때 사용
-  elements.levelLabel.innerHTML = `${state.unlockFlags.regionalFestival ? "🏆 " : ""}LV.${state.level} <br />${levelInfo.title}`;
+  // 매 프레임 호출되므로 바뀔 때만 DOM을 다시 씀
+  setRenderedHtml(elements.levelLabel, `${state.unlockFlags.regionalFestival ? "🏆 " : ""}LV.${state.level} <br />${levelInfo.title}`);
   const nextLevel = getNextGameLevel(state.level);
   if (nextLevel) {
     const span = nextLevel.requiredConsumed - levelInfo.requiredConsumed;
@@ -1763,7 +1804,7 @@ function renderBoosterStatusPanel() {
     const previewDuration = getNextBoosterDuration();
     elements.boosterStatusHeadline.textContent = "비료 부스터가 없어요";
     elements.boosterStatusLabel1.textContent = "획득 방법";
-    elements.boosterStatusValue1.textContent = "LV업 · 미션 · 소비 보상";
+    elements.boosterStatusValue1.textContent = "LV업·미션·출석";
     elements.boosterStatusLabel2.textContent = "효과";
     elements.boosterStatusValue2.textContent = `수확량 ${formatMultiplier(previewMultiplier)}배 · ${previewDuration}초`;
   }
@@ -1800,60 +1841,88 @@ function renderLevelDialog() {
   }
 }
 
+// 장비 카드도 renderStableButtonList와 같은 이유로 처음 한 번만 만들고 내용만 갱신한다.
+// (예전에는 300ms마다 카드를 새로 만들어, 강화 버튼을 누르는 도중 교체되면 클릭이 무시됐음)
 function renderUpgrades() {
-  elements.upgradeList.innerHTML = "";
-  renderToolCard("click", "수동 수확", state.clickTool, TOOL_CONFIG.click, TOOL_TIER_NAMES.click, getTapPower());
-  renderToolCard("auto", "자동 수확", state.autoTool, TOOL_CONFIG.auto, TOOL_TIER_NAMES.auto, getPerSecond());
+  const list = elements.upgradeList;
+  if (list.children.length !== 2) {
+    list.innerHTML = "";
+    for (const kind of ["click", "auto"]) list.append(createToolCard(kind));
+  }
+  renderToolCard(list.children[0], "click", "수동 수확", state.clickTool, TOOL_CONFIG.click, TOOL_TIER_NAMES.click, getTapPower());
+  renderToolCard(list.children[1], "auto", "자동 수확", state.autoTool, TOOL_CONFIG.auto, TOOL_TIER_NAMES.auto, getPerSecond());
 }
 
-function renderToolCard(kind, label, tool, config, names, currentOutput) {
+function createToolCard(kind) {
   const wrap = document.createElement("div");
   wrap.className = "tool-card";
+  const part = (tag, className, onClick) => {
+    const el = document.createElement(tag);
+    el.className = className;
+    if (tag === "button") {
+      el.type = "button";
+      el.addEventListener("click", onClick);
+    }
+    wrap.append(el);
+    return el;
+  };
+  part("div", "tool-card-header");
+  part("div", "tool-card-stats");
+  part("button", "game-card tool-upgrade-btn", () => buyInnerUpgrade(kind));
+  part("button", "game-card tool-tier-btn", () => buyNextTier(kind));
+  part("p", "tool-tier-note").textContent = "최고 티어입니다.";
+  return wrap;
+}
 
+function setRenderedHtml(element, html) {
+  if (element.renderedHtml === html) return;
+  element.renderedHtml = html;
+  element.innerHTML = html;
+}
+
+function renderToolCard(wrap, kind, label, tool, config, names, currentOutput) {
   const innerCost = getInnerUpgradeCost(tool, config);
   const basePower = tierBasePower(tool.tier);
   const nextInnerPower = basePower * (1 + config.innerLevelGrowth * tool.level);
-  const canInnerUpgrade = state.rice >= innerCost;
-
   const nextTierUnlocked = isNextTierUnlocked(tool, config);
   const nextTierCost = getNextTierCost(tool, config);
   const isMaxTier = tool.tier >= config.tierCount;
+  const unit = kind === "click" ? "클릭당" : "초당";
 
-  wrap.innerHTML = `
-    <div class="tool-card-header">
-      <strong>${label}: ${names[tool.tier - 1]}</strong>
-      <span>T${tool.tier} · 내부 Lv.${tool.level}</span>
-    </div>
-    <div class="tool-card-stats">
-      <span>현재 ${kind === "click" ? "클릭당" : "초당"} 수확량: <strong>${formatWeight(currentOutput)}</strong></span>
-    </div>
-    <button type="button" class="game-card tool-upgrade-btn" ${canInnerUpgrade ? "" : "disabled"}>
-      <span class="card-icon">⬆</span>
-      <span>
-        <span class="card-title">내부 강화 (Lv.${tool.level} → ${tool.level + 1})</span>
-        <span class="card-meta">${kind === "click" ? "클릭당" : "초당"} ${formatWeight(basePower * (1 + config.innerLevelGrowth * (tool.level - 1)))} → ${formatWeight(nextInnerPower)}</span>
-      </span>
-      <span class="card-cost">${formatWeight(innerCost)}</span>
-    </button>
-    ${
-      isMaxTier
-        ? `<p class="tool-tier-note">최고 티어입니다.</p>`
-        : `<button type="button" class="game-card tool-tier-btn" ${nextTierUnlocked && state.rice >= nextTierCost ? "" : "disabled"}>
-            <span class="card-icon">🔒</span>
-            <span>
-              <span class="card-title">다음 티어: ${names[tool.tier]}</span>
-              <span class="card-meta">${nextTierUnlocked ? "구매 시 티어 교체, 내부 Lv.1부터 시작" : `게임 LV.${tool.tier + 1} 필요`}</span>
-            </span>
-            <span class="card-cost">${nextTierUnlocked ? formatWeight(nextTierCost) : "잠김"}</span>
-          </button>`
-    }
-  `;
+  setRenderedHtml(wrap.querySelector(".tool-card-header"), `
+    <strong>${label}: ${names[tool.tier - 1]}</strong>
+    <span>T${tool.tier} · 내부 Lv.${tool.level}</span>
+  `);
+  setRenderedHtml(wrap.querySelector(".tool-card-stats"), `
+    <span>현재 ${unit} 수확량: <strong>${formatWeight(currentOutput)}</strong></span>
+  `);
 
-  wrap.querySelector(".tool-upgrade-btn").addEventListener("click", () => buyInnerUpgrade(kind));
+  const innerBtn = wrap.querySelector(".tool-upgrade-btn");
+  innerBtn.disabled = state.rice < innerCost;
+  setRenderedHtml(innerBtn, `
+    <span class="card-icon">⬆</span>
+    <span>
+      <span class="card-title">내부 강화 (Lv.${tool.level} → ${tool.level + 1})</span>
+      <span class="card-meta">${unit} ${formatWeight(basePower * (1 + config.innerLevelGrowth * (tool.level - 1)))} → ${formatWeight(nextInnerPower)}</span>
+    </span>
+    <span class="card-cost">${formatWeight(innerCost)}</span>
+  `);
+
+  // 최고 티어면 다음 티어 버튼 대신 안내 문구 (.game-card의 display 규칙보다 우선하도록 style로 숨김)
   const tierBtn = wrap.querySelector(".tool-tier-btn");
-  if (tierBtn) tierBtn.addEventListener("click", () => buyNextTier(kind));
-
-  elements.upgradeList.append(wrap);
+  tierBtn.style.display = isMaxTier ? "none" : "";
+  wrap.querySelector(".tool-tier-note").style.display = isMaxTier ? "" : "none";
+  if (!isMaxTier) {
+    tierBtn.disabled = !nextTierUnlocked || state.rice < nextTierCost;
+    setRenderedHtml(tierBtn, `
+      <span class="card-icon">🔒</span>
+      <span>
+        <span class="card-title">다음 티어: ${names[tool.tier]}</span>
+        <span class="card-meta">${nextTierUnlocked ? "구매 시 티어 교체, 내부 Lv.1부터 시작" : `게임 LV.${tool.tier + 1} 필요`}</span>
+      </span>
+      <span class="card-cost">${nextTierUnlocked ? formatWeight(nextTierCost) : "잠김"}</span>
+    `);
+  }
 }
 
 function getRecipeEffectNote(recipe) {
@@ -2471,11 +2540,15 @@ window.addEventListener("storage", (event) => {
 setInterval(() => saveState(true), 15000);
 
 function gameLoop(now) {
-  const deltaSeconds = Math.min((now - lastTick) / 1000, 0.25);
-  lastTick = now;
-
-  const passiveGain = getPerSecond() * deltaSeconds;
-  if (passiveGain > 0) gainRice(passiveGain, { instant: true });
+  if (catchUpAwayHarvest(now)) {
+    announceAwayHarvest(); // 루프가 다시 돈다 = 화면이 다시 보임
+  } else {
+    const deltaSeconds = Math.min(Math.max(0, (now - lastTick) / 1000), 0.25);
+    lastTick = now;
+    const passiveGain = getPerSecond() * deltaSeconds;
+    if (passiveGain > 0) gainRice(passiveGain, { instant: true });
+    if (awayHarvest.seconds) announceAwayHarvest(); // 가려진 동안 저장 때 채운 몫
+  }
 
   renderStats();
   if (now - lastFullRender > 300) {

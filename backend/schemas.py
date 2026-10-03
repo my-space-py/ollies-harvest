@@ -34,20 +34,11 @@ class SaveResponse(BaseModel):
     data: dict[str, Any]
 
 
-class LeaderboardEntry(BaseModel):
-    rank: int
-    nickname: str
-    consumed: float
-
-
-class LeaderboardResponse(BaseModel):
-    entries: list[LeaderboardEntry]
-
-
 class WeeklyLeaderboardEntry(BaseModel):
     rank: int
-    nickname: str
+    alias: str  # 이번 주 익명 이름 (실제 닉네임은 랭킹에 내보내지 않음)
     weeklyHarvest: float
+    isMe: bool = False
 
 
 class WeeklyLeaderboardResponse(BaseModel):

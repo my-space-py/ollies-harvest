@@ -59,11 +59,15 @@ function createGame(enabled = true) {
     window: { addEventListener() {} },
   };
   vm.createContext(sandbox);
-  vm.runInContext(enabled ? configSource : configSource.replace('const ADMIN_MODE_ENABLED = true;', 'const ADMIN_MODE_ENABLED = false;'), sandbox);
+  // 배포 설정(ADMIN_MODE_ENABLED)과 무관하게 테스트에서 켜고/끄고 검증
+  const adminFlag = /const ADMIN_MODE_ENABLED = (true|false);/;
+  assert.match(configSource, adminFlag);
+  vm.runInContext(configSource.replace(adminFlag, `const ADMIN_MODE_ENABLED = ${enabled};`), sandbox);
   vm.runInContext(gameSource, sandbox);
   const run = code => vm.runInContext(code, sandbox);
   run(`
     var realShowToast = showToast; // 알림 큐 테스트용으로 진짜 함수를 보관
+    var realRenderUpgrades = renderUpgrades; // 장비 버튼 노드 유지 테스트용
     render = renderUpgrades = renderRecipes = renderStatsSummary = () => {};
     showToast = showOllieReaction = showActionEffect = playGameSound = () => {};
     function resetReady() {
@@ -338,6 +342,60 @@ test('reward lists keep the same button nodes across repeated renders so presses
     renderAttendance(); renderMissions();`);
   assert.equal(g.node('#attendanceList').children[0].disabled, true);
   assert.equal(g.node('#missionDialogList').children[0].disabled, true);
+});
+
+test('time while the tab is hidden (game loop paused) is harvested like offline time, also when saving while hidden', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.autoTool = { tier: 3, level: 1 }; state.rice = 0;
+    state.buffs.autoUntil = Date.now() + 1e9; state.buffs.autoMultiplier = 3; // 타임 버프는 오프라인처럼 제외
+    lastTick = performance.now(); awayHarvest.gain = 0; awayHarvest.seconds = 0;`);
+  g.advance(10000);
+  g.run(`saveState(true); // 가려진 동안의 주기 저장
+    assert.ok(Math.abs(state.rice - 20.25 * 10) < 1e-6, 'rice=' + state.rice);
+    assert.equal(state.weeklyHarvest, 0); // 오프라인 보상과 같이 주간 수확량에는 미포함
+    assert.equal(JSON.parse(localStorage.getItem(getStorageKey())).rice, state.rice); // 저장에 포함
+    assert.equal(awayHarvest.seconds, 10);`);
+  g.advance(500); // 보통 프레임 간격(1초 이하)은 그대로 게임 루프가 처리
+  g.run(`assert.equal(catchUpAwayHarvest(), false);`);
+  g.advance(30 * 3600 * 1000); // 30시간 가려짐 → 24시간까지만
+  g.run(`state.rice = 0; state.offlineBonus = 1; assert.equal(catchUpAwayHarvest(), true);
+    assert.ok(Math.abs(state.rice - 20.25 * 86400 * 2) < 1e-3, 'rice=' + state.rice);`);
+});
+
+test('shipped config has admin mode turned off', () => {
+  assert.match(configSource, /const ADMIN_MODE_ENABLED = false;/);
+});
+
+test('upgrade cards keep the same buttons across repeated renders, so a long press still upgrades', () => {
+  const g = createGame();
+  g.run(`state = cloneInitialState(); state.rice = 1e6; realRenderUpgrades();`);
+  const list = g.node('#upgradeList');
+  const [clickCard, autoCard] = list.children;
+  const innerBtn = clickCard.querySelector('.tool-upgrade-btn');
+  g.run('realRenderUpgrades(); realRenderUpgrades();'); // 게임 루프의 300ms 주기 렌더링
+  assert.equal(list.children[0], clickCard, 'tool card must not be replaced');
+  assert.equal(clickCard.querySelector('.tool-upgrade-btn'), innerBtn, 'upgrade button must not be replaced');
+  assert.equal(innerBtn.disabled, false);
+  innerBtn.emit('click');
+  autoCard.querySelector('.tool-upgrade-btn').emit('click');
+  g.run(`assert.equal(state.clickTool.level, 2); assert.equal(state.autoTool.level, 2); realRenderUpgrades();`);
+  assert.equal(clickCard.querySelector('.tool-upgrade-btn'), innerBtn);
+  assert.match(innerBtn.innerHTML, /Lv\.2 → 3/);
+  // 다음 티어: LV 부족이면 잠김, 최고 티어면 버튼 대신 안내 문구
+  assert.equal(clickCard.querySelector('.tool-tier-btn').disabled, true);
+  g.run(`state.clickTool.tier = 12; realRenderUpgrades();`);
+  assert.equal(clickCard.querySelector('.tool-tier-btn').style.display, 'none');
+  assert.equal(clickCard.querySelector('.tool-tier-note').style.display, '');
+});
+
+test('nicknames from the server are HTML-escaped before being shown (no stored XSS)', () => {
+  const g = createGame();
+  g.run(`renderFriends([{ user_id: 2, nickname: '<img src=x onerror=alert(1)>', gameLevel: 1, gameLevelTitle: '새싹 농부', weeklyHarvest: 0 }]);`);
+  const friendHtml = g.node('#friendList').children[0].innerHTML;
+  assert.ok(friendHtml.includes('&lt;img src=x onerror=alert(1)&gt;') && !friendHtml.includes('<img'));
+  // 받은 친구 요청·랭킹도 같은 escapeHtml을 거친다
+  g.run(`assert.equal(escapeHtml('"><script>x</script>&\\''), '&quot;&gt;&lt;script&gt;x&lt;/script&gt;&amp;&#39;');
+    assert.equal(escapeHtml(null), '');`);
 });
 
 test('random event: ready -> start -> complete -> reward makes rice x1.5, then cooldown picks a different event', () => {

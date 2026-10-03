@@ -1,3 +1,5 @@
+import datetime
+
 # frontend/js/balance-config.js의 GAME_LEVELS와 반드시 동일하게 유지해야 하는 미러 설정.
 # 프론트/백엔드가 서로 다른 언어라 공유 파일을 쓸 수 없어 부득이하게 값을 복제한다.
 # 밸런스(임계값/호칭)를 바꿀 때는 balance-config.js와 이 파일을 함께 수정해야 한다.
@@ -28,9 +30,14 @@ def get_level_by_consumed(consumed: float):
     return current
 
 
-def get_current_week_key():
-    """ISO 주차 기준 키 (예: '2026-W35'). 프론트 game.js의 getISOWeekKey()와 동일한 알고리즘."""
-    import datetime
+# 프론트 getISOWeekKey()는 플레이어 기기의 로컬 날짜(한국 = KST)로 주차를 정한다.
+# 서버가 UTC로 계산하면 매주 월요일 00~09시(KST) 동안 서버만 지난주로 판단해 랭킹/친구의 주간 수확량이 0으로 보였다.
+# 서버 OS 시간대(GCE는 보통 UTC)와 무관하게 KST(UTC+9, 서머타임 없음)로 고정한다.
+KST = datetime.timezone(datetime.timedelta(hours=9))
 
-    year, week, _ = datetime.datetime.utcnow().isocalendar()
+
+def get_current_week_key(now: datetime.datetime | None = None):
+    """ISO 주차 기준 키 (예: '2026-W35'). 프론트 game.js의 getISOWeekKey()와 동일한 알고리즘."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    year, week, _ = now.astimezone(KST).isocalendar()
     return f"{year}-W{week:02d}"

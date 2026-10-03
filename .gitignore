@@ -49,3 +49,5 @@ __pycache__/
 *.pyc
 *.db
 *.sqlite3
+# 랭킹 익명 이름 비밀값 (서버에서 처음 실행할 때 자동 생성)
+backend/ranking_alias_salt.txt
